@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSearch</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🛡️SafeSearch</h1>
+    <p class="subtitle">Personal Search & Website Blocker</p>
+
+    <hr>
+
+    <h2>🚫 Block a Search</h2>
+
+    <div class="input-group">
+        <input 
+            type="text" 
+            id="keywordInput" 
+            placeholder="Example: unwanted search"
+        >
+        <button id="addKeyword">Add</button>
+    </div>
+
+    <p id="keywordStatus" class="search-status-note">🔒 Searches are permanently blocked and hidden.</p>
+
+    <hr>
+
+    <h2>🌐 Block a Website</h2>
+
+    <div class="input-group">
+        <input 
+            type="text" 
+            id="websiteInput" 
+            placeholder="Example: website.com or website.com/url"
+        >
+        <button id="addWebsite">Add</button>
+    </div>
+
+    <div class="timer-section">
+        <div class="timer-row">
+            <label for="websiteBlockTime" class="timer-label">⏱️ Block until:</label>
+            <input type="time" id="websiteBlockTime" class="time-input" value="22:00">
+        </div>
+        <div class="preset-chips">
+            <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="30m">+30m</button>
+            <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="1h">+1h</button>
+            <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="2h">+2h</button>
+            <button type="button" class="preset-chip active" data-target="websiteBlockTime" data-preset="22:00">10 PM</button>
+            <button type="button" class="preset-chip chip-clear" data-target="websiteBlockTime" data-preset="">No Timer</button>
+        </div>
+    </div>
+
+    <ul id="websiteList"></ul>
+
+    <hr>
+
+</div>
+
+<script src="popup.js"></script>
+
+</body>
+</html>

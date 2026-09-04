@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "SafeSearch - Personal Search & Website Blocker",
+  "version": "1.3",
+  "description": "Block unwanted searches, websites, and specific URLs.",
+
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SafeSearch"
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html",
+        "style.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.google.com/*",
+        "*://*.google.co.in/*",
+        "*://*.bing.com/*",
+        "*://*.youtube.com/*",
+        "*://*.yahoo.com/*",
+        "*://*.duckduckgo.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

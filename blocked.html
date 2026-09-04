@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Blocked - SafeSearch</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="blocked-container">
+
+    <div class="shield">🛡️</div>
+
+    <h1>Access Blocked!</h1>
+
+    <p>
+        This website or page has been blocked by your personal filter.
+    </p>
+
+    <p class="motivation">
+        Stay focused on your goals! 🚀
+    </p>
+
+    <button id="goBack">Go Back</button>
+
+</div>
+
+<script>
+    document.getElementById("goBack").addEventListener("click", () => {
+        window.history.back();
+    });
+</script>
+
+</body>
+</html>
