@@ -261,7 +261,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 li.className = isLocked ? "rule-item is-locked" : "rule-item is-unlocked";
                 li.setAttribute("data-type", "website");
                 li.setAttribute("data-index", index);
-                if (blockUntil) {
+                if (isLocked) {
                     li.setAttribute("data-block-until", blockUntil);
                 }
 
@@ -324,7 +324,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function updateActiveTimers() {
         const now = Date.now();
-        let needsReRender = false;
+        let timerExpired = false;
 
         document.querySelectorAll("li[data-block-until]").forEach(function (li) {
             const blockUntil = parseInt(li.getAttribute("data-block-until"), 10);
@@ -332,10 +332,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
             const remainingMs = blockUntil - now;
             if (remainingMs <= 0) {
-                // Timer has just expired! Trigger full re-render so buttons unlock
-                needsReRender = true;
+                // Immediately remove attribute so this never re-triggers repeatedly
+                li.removeAttribute("data-block-until");
+                timerExpired = true;
             } else {
-                // Update countdown text live
+                // Only update countdown text in-place (no full re-render)
                 const countdownSpan = li.querySelector(".time-countdown");
                 if (countdownSpan) {
                     countdownSpan.textContent = formatTimeRemaining(remainingMs);
@@ -343,7 +344,8 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
-        if (needsReRender) {
+        // Only trigger re-render ONCE when a countdown reaches 0
+        if (timerExpired) {
             loadWebsites();
         }
     }
