@@ -694,6 +694,7 @@ body.blocked-body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  font-family: inherit;
 }
 
 #goBack:hover {
@@ -705,3 +706,4 @@ body.blocked-body {
 #goBack:active {
   transform: translateY(0);
 }
+

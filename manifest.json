@@ -27,7 +27,8 @@
     {
       "resources": [
         "blocked.html",
-        "style.css"
+        "style.css",
+        "blocked.js"
       ],
       "matches": [
         "<all_urls>"
