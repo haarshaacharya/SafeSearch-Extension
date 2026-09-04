@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SafeSearch</title>
+    <title>SafeSearch — Focus & Site Blocker</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -12,54 +11,104 @@
 
 <div class="container">
 
-    <h1>🛡️SafeSearch</h1>
-    <p class="subtitle">Personal Search & Website Blocker</p>
-
-    <hr>
-
-    <h2>🚫 Block a Search</h2>
-
-    <div class="input-group">
-        <input 
-            type="text" 
-            id="keywordInput" 
-            placeholder="Example: unwanted search"
-        >
-        <button id="addKeyword">Add</button>
-    </div>
-
-    <p id="keywordStatus" class="search-status-note">🔒 Searches are permanently blocked and hidden.</p>
-
-    <hr>
-
-    <h2>🌐 Block a Website</h2>
-
-    <div class="input-group">
-        <input 
-            type="text" 
-            id="websiteInput" 
-            placeholder="Example: website.com or website.com/url"
-        >
-        <button id="addWebsite">Add</button>
-    </div>
-
-    <div class="timer-section">
-        <div class="timer-row">
-            <label for="websiteBlockTime" class="timer-label">⏱️ Block until:</label>
-            <input type="time" id="websiteBlockTime" class="time-input" value="22:00">
+    <!-- Header Section -->
+    <header class="app-header">
+        <div class="logo-wrapper">
+            <div class="shield-orb">🛡️</div>
+            <div class="header-text">
+                <div class="brand-row">
+                    <h1 class="brand-title">SafeSearch</h1>
+                    <span class="version-tag">v1.3</span>
+                </div>
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Shield Protection Active</span>
+                </div>
+            </div>
         </div>
-        <div class="preset-chips">
-            <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="30m">+30m</button>
-            <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="1h">+1h</button>
-            <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="2h">+2h</button>
-            <button type="button" class="preset-chip active" data-target="websiteBlockTime" data-preset="22:00">10 PM</button>
-            <button type="button" class="preset-chip chip-clear" data-target="websiteBlockTime" data-preset="">No Timer</button>
+    </header>
+
+    <!-- Block Search Section -->
+    <section class="control-card">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="section-icon">🚫</span>
+                <span>Block a Search Query</span>
+            </div>
+            <span class="card-badge">Permanent</span>
         </div>
-    </div>
 
-    <ul id="websiteList"></ul>
+        <div class="input-group">
+            <input 
+                type="text" 
+                id="keywordInput" 
+                placeholder="e.g. distracting topic, gossip..."
+                autocomplete="off"
+                spellcheck="false"
+            >
+            <button id="addKeyword" class="btn-primary">
+                <span>Add</span>
+            </button>
+        </div>
 
-    <hr>
+        <div id="keywordStatus" class="search-status-note">
+            <span class="note-icon">🔒</span>
+            <span class="note-text">Searches are permanently blocked and hidden.</span>
+        </div>
+    </section>
+
+    <!-- Block Website Section -->
+    <section class="control-card">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="section-icon">🌐</span>
+                <span>Block a Website or URL</span>
+            </div>
+            <span class="card-badge">Instant</span>
+        </div>
+
+        <div class="input-group">
+            <input 
+                type="text" 
+                id="websiteInput" 
+                placeholder="e.g. site.com or site.com/shorts"
+                autocomplete="off"
+                spellcheck="false"
+            >
+            <button id="addWebsite" class="btn-primary">
+                <span>Add</span>
+            </button>
+        </div>
+
+        <!-- Timer Controls -->
+        <div class="timer-section">
+            <div class="timer-row">
+                <label for="websiteBlockTime" class="timer-label">
+                    <span>⏱️</span>
+                    <span>Lock Access Until:</span>
+                </label>
+                <div class="time-input-wrapper">
+                    <input type="time" id="websiteBlockTime" class="time-input" value="22:00">
+                </div>
+            </div>
+
+            <div class="preset-chips">
+                <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="30m">+30m</button>
+                <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="1h">+1h</button>
+                <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="2h">+2h</button>
+                <button type="button" class="preset-chip active" data-target="websiteBlockTime" data-preset="22:00">10 PM</button>
+                <button type="button" class="preset-chip chip-clear" data-target="websiteBlockTime" data-preset="">Always</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Blocked Websites List Section -->
+    <section class="list-section">
+        <div class="list-header">
+            <span class="list-title">🛡️ Active Website Rules</span>
+        </div>
+        <ul id="websiteList"></ul>
+    </section>
 
 </div>
 

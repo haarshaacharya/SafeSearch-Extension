@@ -73,11 +73,13 @@ document.addEventListener("DOMContentLoaded", function () {
         return `${hours}:${minutes}`;
     }
 
-    function showKeywordFeedback(msg) {
+    function showKeywordFeedback(msg, isSuccess = true) {
         if (!keywordStatus) return;
-        keywordStatus.textContent = msg;
+        keywordStatus.innerHTML = `<span class="note-icon">${isSuccess ? "✅" : "ℹ️"}</span> <span class="note-text">${escapeHtml(msg)}</span>`;
+        keywordStatus.classList.add("feedback-active");
         setTimeout(function () {
-            keywordStatus.textContent = "🔒 Searches are permanently blocked and hidden.";
+            keywordStatus.innerHTML = `<span class="note-icon">🔒</span> <span class="note-text">Searches are permanently blocked and hidden.</span>`;
+            keywordStatus.classList.remove("feedback-active");
         }, 2500);
     }
 
@@ -167,11 +169,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 chrome.storage.local.set({ blockedKeywords: raw }, function () {
                     keywordInput.value = "";
-                    showKeywordFeedback("✅ Search term blocked & hidden permanently!");
+                    showKeywordFeedback("Search term blocked & hidden permanently!", true);
                 });
             } else {
                 keywordInput.value = "";
-                showKeywordFeedback("ℹ️ Search term is already blocked!");
+                showKeywordFeedback("Search term is already in block list!", false);
             }
         });
     });
@@ -235,6 +237,20 @@ document.addEventListener("DOMContentLoaded", function () {
             const raw = result.blockedWebsites || [];
             websiteList.innerHTML = "";
 
+            if (raw.length === 0) {
+                const emptyLi = document.createElement("li");
+                emptyLi.className = "empty-state-card";
+                emptyLi.innerHTML = `
+                    <div class="empty-icon-ring">🛡️</div>
+                    <div class="empty-info">
+                        <span class="empty-heading">No sites blocked yet</span>
+                        <span class="empty-subtext">Add a website or URL above to build your focus shield.</span>
+                    </div>
+                `;
+                websiteList.appendChild(emptyLi);
+                return;
+            }
+
             raw.forEach(function (item, index) {
                 const website = typeof item === "string" ? item : (item.url || "");
                 const blockUntil = typeof item === "string" ? null : item.blockUntil;
@@ -242,6 +258,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 const isLocked = Boolean(blockUntil && now < blockUntil);
 
                 const li = document.createElement("li");
+                li.className = isLocked ? "rule-item is-locked" : "rule-item is-unlocked";
                 li.setAttribute("data-type", "website");
                 li.setAttribute("data-index", index);
                 if (blockUntil) {
@@ -255,7 +272,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 // Title
                 const titleDiv = document.createElement("div");
                 titleDiv.className = "item-title";
-                titleDiv.innerHTML = `<span>🌐</span> <span>${escapeHtml(website)}</span>`;
+                titleDiv.innerHTML = `<span class="site-icon">🌐</span> <span class="site-name">${escapeHtml(website)}</span>`;
 
                 // Status badge
                 const statusDiv = document.createElement("div");
@@ -263,11 +280,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 if (isLocked) {
                     const remainingMs = blockUntil - now;
-                    statusDiv.innerHTML = `<span class="badge badge-locked">🔒 Locked until ${formatTargetTime(blockUntil)} (⏳ <span class="time-countdown">${formatTimeRemaining(remainingMs)}</span>)</span>`;
+                    statusDiv.innerHTML = `<span class="badge badge-locked"><span class="badge-dot"></span><span class="badge-text">Locked until ${formatTargetTime(blockUntil)} (<span class="time-countdown">${formatTimeRemaining(remainingMs)}</span>)</span></span>`;
                 } else if (blockUntil && now >= blockUntil) {
-                    statusDiv.innerHTML = `<span class="badge badge-unlocked">🔓 Time Complete (Ready to Delete)</span>`;
+                    statusDiv.innerHTML = `<span class="badge badge-unlocked"><span class="badge-dot"></span><span class="badge-text">Time Complete (Ready to Delete)</span></span>`;
                 } else {
-                    statusDiv.innerHTML = `<span class="badge badge-permanent">🛡️ Always Blocked</span>`;
+                    statusDiv.innerHTML = `<span class="badge badge-permanent"><span class="badge-dot"></span><span class="badge-text">Always Blocked</span></span>`;
                 }
 
                 infoDiv.appendChild(titleDiv);
@@ -278,12 +295,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (isLocked) {
                     deleteBtn.className = "delete-btn btn-locked";
                     deleteBtn.disabled = true;
-                    deleteBtn.innerHTML = "🔒 Locked";
+                    deleteBtn.innerHTML = `<span>🔒 Locked</span>`;
                     deleteBtn.title = `Locked until ${formatTargetTime(blockUntil)}`;
                 } else {
                     deleteBtn.className = "delete-btn btn-unlocked";
                     deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = "🗑️ Delete";
+                    deleteBtn.innerHTML = `<span>🗑️ Delete</span>`;
                     deleteBtn.title = "Delete and unblock";
 
                     deleteBtn.addEventListener("click", function () {
