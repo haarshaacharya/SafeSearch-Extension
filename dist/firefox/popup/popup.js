@@ -89,11 +89,29 @@ function initPopup() {
 
     function showKeywordFeedback(msg, isSuccess = true) {
         if (!keywordStatus) return;
-        keywordStatus.innerHTML = `<span class="note-icon">${isSuccess ? "✅" : "ℹ️"}</span> <span class="note-text">${escapeHtml(msg)}</span>`;
+        keywordStatus.textContent = "";
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "note-icon";
+        iconSpan.textContent = isSuccess ? "✅" : "ℹ️";
+        const textSpan = document.createElement("span");
+        textSpan.className = "note-text";
+        textSpan.textContent = msg;
+        keywordStatus.appendChild(iconSpan);
+        keywordStatus.appendChild(document.createTextNode(" "));
+        keywordStatus.appendChild(textSpan);
         keywordStatus.classList.add("feedback-active");
         setTimeout(function () {
             if (keywordStatus) {
-                keywordStatus.innerHTML = `<span class="note-icon">🔒</span> <span class="note-text">Searches are permanently blocked and hidden.</span>`;
+                keywordStatus.textContent = "";
+                const defaultIcon = document.createElement("span");
+                defaultIcon.className = "note-icon";
+                defaultIcon.textContent = "🔒";
+                const defaultText = document.createElement("span");
+                defaultText.className = "note-text";
+                defaultText.textContent = "Searches are permanently blocked and hidden.";
+                keywordStatus.appendChild(defaultIcon);
+                keywordStatus.appendChild(document.createTextNode(" "));
+                keywordStatus.appendChild(defaultText);
                 keywordStatus.classList.remove("feedback-active");
             }
         }, 2500);
@@ -109,14 +127,6 @@ function initPopup() {
         // Remove trailing slashes
         str = str.replace(/\/+$/, "");
         return str;
-    }
-
-    // HTML sanitizer to prevent XSS
-    function escapeHtml(str) {
-        if (!str) return "";
-        const div = document.createElement("div");
-        div.textContent = str;
-        return div.innerHTML;
     }
 
     // ============================
@@ -148,10 +158,20 @@ function initPopup() {
                 li.removeAttribute("data-block-until");
                 li.className = "rule-item is-unlocked";
 
-                // Update badge in-place
+                // Update badge in-place using safe DOM methods
                 const statusDiv = li.querySelector(".item-status");
                 if (statusDiv) {
-                    statusDiv.innerHTML = `<span class="badge badge-unlocked"><span class="badge-dot"></span><span class="badge-text">Time Complete (Ready to Delete)</span></span>`;
+                    statusDiv.textContent = "";
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-unlocked";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const text = document.createElement("span");
+                    text.className = "badge-text";
+                    text.textContent = "Time Complete (Ready to Delete)";
+                    badge.appendChild(dot);
+                    badge.appendChild(text);
+                    statusDiv.appendChild(badge);
                 }
 
                 // Update delete button in-place
@@ -159,7 +179,10 @@ function initPopup() {
                 if (deleteBtn) {
                     deleteBtn.className = "delete-btn btn-unlocked";
                     deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = `<span>🗑️ Delete</span>`;
+                    deleteBtn.textContent = "";
+                    const span = document.createElement("span");
+                    span.textContent = "🗑️ Delete";
+                    deleteBtn.appendChild(span);
                     deleteBtn.title = "Delete and unblock";
                 }
             } else {
@@ -355,18 +378,32 @@ function initPopup() {
             }
 
             const raw = (result && result.blockedWebsites) || [];
-            websiteList.innerHTML = "";
+            websiteList.textContent = "";
 
             if (raw.length === 0) {
                 const emptyLi = document.createElement("li");
                 emptyLi.className = "empty-state-card";
-                emptyLi.innerHTML = `
-                    <div class="empty-icon-ring">🛡️</div>
-                    <div class="empty-info">
-                        <span class="empty-heading">No sites blocked yet</span>
-                        <span class="empty-subtext">Add a website or URL above to build your focus shield.</span>
-                    </div>
-                `;
+
+                const emptyIcon = document.createElement("div");
+                emptyIcon.className = "empty-icon-ring";
+                emptyIcon.textContent = "🛡️";
+
+                const emptyInfo = document.createElement("div");
+                emptyInfo.className = "empty-info";
+
+                const heading = document.createElement("span");
+                heading.className = "empty-heading";
+                heading.textContent = "No sites blocked yet";
+
+                const subtext = document.createElement("span");
+                subtext.className = "empty-subtext";
+                subtext.textContent = "Add a website or URL above to build your focus shield.";
+
+                emptyInfo.appendChild(heading);
+                emptyInfo.appendChild(subtext);
+                emptyLi.appendChild(emptyIcon);
+                emptyLi.appendChild(emptyInfo);
+
                 websiteList.appendChild(emptyLi);
                 return;
             }
@@ -392,7 +429,15 @@ function initPopup() {
                 // Title
                 const titleDiv = document.createElement("div");
                 titleDiv.className = "item-title";
-                titleDiv.innerHTML = `<span class="site-icon">🌐</span> <span class="site-name">${escapeHtml(website)}</span>`;
+                const siteIcon = document.createElement("span");
+                siteIcon.className = "site-icon";
+                siteIcon.textContent = "🌐";
+                const siteName = document.createElement("span");
+                siteName.className = "site-name";
+                siteName.textContent = website;
+                titleDiv.appendChild(siteIcon);
+                titleDiv.appendChild(document.createTextNode(" "));
+                titleDiv.appendChild(siteName);
 
                 // Status badge
                 const statusDiv = document.createElement("div");
@@ -400,11 +445,43 @@ function initPopup() {
 
                 if (isLocked) {
                     const remainingMs = blockUntil - now;
-                    statusDiv.innerHTML = `<span class="badge badge-locked"><span class="badge-dot"></span><span class="badge-text">Locked until ${formatTargetTime(blockUntil)} (<span class="time-countdown">${formatTimeRemaining(remainingMs)}</span>)</span></span>`;
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-locked";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const badgeText = document.createElement("span");
+                    badgeText.className = "badge-text";
+                    badgeText.appendChild(document.createTextNode(`Locked until ${formatTargetTime(blockUntil)} (`));
+                    const countdownSpan = document.createElement("span");
+                    countdownSpan.className = "time-countdown";
+                    countdownSpan.textContent = formatTimeRemaining(remainingMs);
+                    badgeText.appendChild(countdownSpan);
+                    badgeText.appendChild(document.createTextNode(")"));
+                    badge.appendChild(dot);
+                    badge.appendChild(badgeText);
+                    statusDiv.appendChild(badge);
                 } else if (blockUntil && now >= blockUntil) {
-                    statusDiv.innerHTML = `<span class="badge badge-unlocked"><span class="badge-dot"></span><span class="badge-text">Time Complete (Ready to Delete)</span></span>`;
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-unlocked";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const badgeText = document.createElement("span");
+                    badgeText.className = "badge-text";
+                    badgeText.textContent = "Time Complete (Ready to Delete)";
+                    badge.appendChild(dot);
+                    badge.appendChild(badgeText);
+                    statusDiv.appendChild(badge);
                 } else {
-                    statusDiv.innerHTML = `<span class="badge badge-permanent"><span class="badge-dot"></span><span class="badge-text">Always Blocked</span></span>`;
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-permanent";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const badgeText = document.createElement("span");
+                    badgeText.className = "badge-text";
+                    badgeText.textContent = "Always Blocked";
+                    badge.appendChild(dot);
+                    badge.appendChild(badgeText);
+                    statusDiv.appendChild(badge);
                 }
 
                 infoDiv.appendChild(titleDiv);
@@ -412,15 +489,18 @@ function initPopup() {
 
                 // Delete button
                 const deleteBtn = document.createElement("button");
+                const btnSpan = document.createElement("span");
                 if (isLocked) {
                     deleteBtn.className = "delete-btn btn-locked";
                     deleteBtn.disabled = true;
-                    deleteBtn.innerHTML = `<span>🔒 Locked</span>`;
+                    btnSpan.textContent = "🔒 Locked";
+                    deleteBtn.appendChild(btnSpan);
                     deleteBtn.title = `Locked until ${formatTargetTime(blockUntil)}`;
                 } else {
                     deleteBtn.className = "delete-btn btn-unlocked";
                     deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = `<span>🗑️ Delete</span>`;
+                    btnSpan.textContent = "🗑️ Delete";
+                    deleteBtn.appendChild(btnSpan);
                     deleteBtn.title = "Delete and unblock";
                 }
 

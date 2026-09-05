@@ -39,7 +39,7 @@ async function updateBlockingRules() {
                 action: {
                     type: "redirect",
                     redirect: {
-                        extensionPath: "/blocked.html"
+                        extensionPath: "/blocked/blocked.html"
                     }
                 },
                 condition: {
@@ -73,7 +73,7 @@ async function redirectOpenBlockedTabs(websites) {
             : await new Promise((resolve) => browserAPI.tabs.query({}, resolve));
 
         if (!tabs || !tabs.length) return;
-        const blockedPageUrl = browserAPI.runtime.getURL("blocked.html");
+        const blockedPageUrl = browserAPI.runtime.getURL("blocked/blocked.html");
 
         for (const tab of tabs) {
             if (!tab.url || 

@@ -22,7 +22,6 @@ Thumbs.db
 *.crx
 *.pem
 *.zip
-dist/
 build/
 
 # Node (if any future tooling is added)
