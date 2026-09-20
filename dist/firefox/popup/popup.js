@@ -1,8 +1,37 @@
 // SafeSearch - Cross-Browser Popup Controller
 // Compatible with Chrome, Edge, Firefox Desktop & Firefox Android
 
-// Cross-browser compatibility API adapter
-const browserAPI = typeof browser !== "undefined" && browser.storage ? browser : chrome;
+// Cross-browser compatibility API adapter (Chrome MV3, Firefox MV3, plus graceful preview fallback)
+const browserAPI = (typeof browser !== "undefined" && browser.storage)
+    ? browser
+    : (typeof chrome !== "undefined" && chrome.storage)
+        ? chrome
+        : {
+            storage: {
+                local: {
+                    get: function (keys, callback) {
+                        const res = {};
+                        const keyList = Array.isArray(keys) ? keys : [keys];
+                        keyList.forEach(k => {
+                            try {
+                                const val = localStorage.getItem("safesearch_" + k);
+                                if (val !== null) res[k] = JSON.parse(val);
+                            } catch (e) {}
+                        });
+                        if (callback) callback(res);
+                    },
+                    set: function (items, callback) {
+                        try {
+                            Object.keys(items).forEach(k => {
+                                localStorage.setItem("safesearch_" + k, JSON.stringify(items[k]));
+                            });
+                        } catch (e) {}
+                        if (callback) callback();
+                    }
+                }
+            },
+            runtime: {}
+        };
 
 // Guard against repeated popup initialization
 let popupInitialized = false;
@@ -22,6 +51,14 @@ function initPopup() {
     const addWebsiteBtn = document.getElementById("addWebsite");
     const websiteList = document.getElementById("websiteList");
     const websiteBlockTime = document.getElementById("websiteBlockTime");
+    const tabModeTime = document.getElementById("tabModeTime");
+    const tabModeDays = document.getElementById("tabModeDays");
+    const timeModeControls = document.getElementById("timeModeControls");
+    const daysModeControls = document.getElementById("daysModeControls");
+    const websiteBlockDays = document.getElementById("websiteBlockDays");
+    const daysPreviewText = document.getElementById("daysPreviewText");
+
+    let currentBlockMode = "time"; // "time" | "days"
 
     // ============================
     // HELPER FUNCTIONS
@@ -50,15 +87,26 @@ function initPopup() {
         return target.getTime();
     }
 
-    // Format remaining milliseconds into human readable string
+    // Calculate timestamp from number of days
+    function calculateDaysBlockUntilTimestamp(daysValue) {
+        let days = parseInt(daysValue, 10);
+        if (isNaN(days) || days < 1) days = 1;
+        return Date.now() + (days * 24 * 60 * 60 * 1000);
+    }
+
+    // Format remaining milliseconds into human readable string (supports days, hours, mins, secs)
     function formatTimeRemaining(ms) {
         if (ms <= 0) return "0s";
 
         const totalSeconds = Math.floor(ms / 1000);
-        const hours = Math.floor(totalSeconds / 3600);
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
 
+        if (days > 0) {
+            return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+        }
         if (hours > 0) {
             return `${hours}h ${minutes}m ${seconds}s`;
         }
@@ -68,16 +116,32 @@ function initPopup() {
         return `${seconds}s`;
     }
 
-    // Format target timestamp into local time string (e.g. "10:00 PM" or "Tomorrow 10:00 PM")
+    // Format target timestamp into local date/time string
     function formatTargetTime(timestamp) {
         if (!timestamp) return "";
         const targetDate = new Date(timestamp);
         const now = new Date();
 
-        const isTomorrow = targetDate.getDate() !== now.getDate() || targetDate.getMonth() !== now.getMonth();
         const timeStr = targetDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
 
-        return isTomorrow ? `Tomorrow ${timeStr}` : timeStr;
+        const isToday = targetDate.getFullYear() === now.getFullYear() &&
+                        targetDate.getMonth() === now.getMonth() &&
+                        targetDate.getDate() === now.getDate();
+        if (isToday) {
+            return timeStr;
+        }
+
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        const isTomorrow = targetDate.getFullYear() === tomorrow.getFullYear() &&
+                           targetDate.getMonth() === tomorrow.getMonth() &&
+                           targetDate.getDate() === tomorrow.getDate();
+        if (isTomorrow) {
+            return `Tomorrow ${timeStr}`;
+        }
+
+        const dateStr = targetDate.toLocaleDateString([], { month: "short", day: "numeric" });
+        return `${dateStr}, ${timeStr}`;
     }
 
     // Format Date to HH:MM for <input type="time">
@@ -196,10 +260,76 @@ function initPopup() {
     }
 
     // ============================
-    // PRESET CHIPS HANDLER (WEBSITES)
+    // MODE SWITCHER (HOURS vs DAYS)
     // ============================
 
-    document.querySelectorAll(".preset-chip").forEach(function (chip) {
+    function updateDaysPreview() {
+        if (!daysPreviewText || !websiteBlockDays) return;
+        let days = parseInt(websiteBlockDays.value, 10);
+        if (isNaN(days) || days < 1) days = 1;
+        const targetMs = Date.now() + (days * 24 * 60 * 60 * 1000);
+        const dayLabel = days === 1 ? "1 Day" : `${days} Days`;
+        daysPreviewText.textContent = `Locked until ${formatTargetTime(targetMs)} (${dayLabel})`;
+    }
+
+    if (tabModeTime && tabModeDays) {
+        tabModeTime.addEventListener("click", function () {
+            currentBlockMode = "time";
+            tabModeTime.classList.add("active");
+            tabModeDays.classList.remove("active");
+            if (timeModeControls) timeModeControls.style.display = "flex";
+            if (daysModeControls) daysModeControls.style.display = "none";
+        });
+
+        tabModeDays.addEventListener("click", function () {
+            currentBlockMode = "days";
+            tabModeDays.classList.add("active");
+            tabModeTime.classList.remove("active");
+            if (timeModeControls) timeModeControls.style.display = "none";
+            if (daysModeControls) daysModeControls.style.display = "flex";
+            updateDaysPreview();
+        });
+    }
+
+    // Days preset chips handler
+    document.querySelectorAll(".day-chip").forEach(function (chip) {
+        chip.addEventListener("click", function () {
+            const days = parseInt(chip.getAttribute("data-days"), 10);
+            if (isNaN(days)) return;
+
+            document.querySelectorAll(".day-chip").forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+
+            if (websiteBlockDays) {
+                websiteBlockDays.value = days;
+                updateDaysPreview();
+            }
+        });
+    });
+
+    // Custom days number input handler
+    if (websiteBlockDays) {
+        websiteBlockDays.addEventListener("input", function () {
+            const val = parseInt(websiteBlockDays.value, 10);
+            document.querySelectorAll(".day-chip").forEach(c => {
+                if (parseInt(c.getAttribute("data-days"), 10) === val) {
+                    c.classList.add("active");
+                } else {
+                    c.classList.remove("active");
+                }
+            });
+            updateDaysPreview();
+        });
+    }
+
+    // Initialize days preview
+    updateDaysPreview();
+
+    // ============================
+    // PRESET CHIPS HANDLER (TIME OF DAY)
+    // ============================
+
+    document.querySelectorAll("#timeModeControls .preset-chip").forEach(function (chip) {
         chip.addEventListener("click", function () {
             const targetId = chip.getAttribute("data-target");
             const preset = chip.getAttribute("data-preset");
@@ -329,7 +459,12 @@ function initPopup() {
             const website = cleanTargetUrl(websiteInput.value);
             if (website === "") return;
 
-            const blockUntil = calculateBlockUntilTimestamp(websiteBlockTime.value);
+            let blockUntil = null;
+            if (currentBlockMode === "days") {
+                blockUntil = calculateDaysBlockUntilTimestamp(websiteBlockDays ? websiteBlockDays.value : 1);
+            } else {
+                blockUntil = calculateBlockUntilTimestamp(websiteBlockTime ? websiteBlockTime.value : "");
+            }
 
             browserAPI.storage.local.get(["blockedWebsites"], function (result) {
                 if (browserAPI.runtime && browserAPI.runtime.lastError) {

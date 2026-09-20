@@ -1,8 +1,37 @@
 // SafeSearch - Cross-Browser Popup Controller
 // Compatible with Chrome, Edge, Firefox Desktop & Firefox Android
 
-// Cross-browser compatibility API adapter
-const browserAPI = typeof browser !== "undefined" && browser.storage ? browser : chrome;
+// Cross-browser compatibility API adapter (Chrome MV3, Firefox MV3, plus graceful preview fallback)
+const browserAPI = (typeof browser !== "undefined" && browser.storage)
+    ? browser
+    : (typeof chrome !== "undefined" && chrome.storage)
+        ? chrome
+        : {
+            storage: {
+                local: {
+                    get: function (keys, callback) {
+                        const res = {};
+                        const keyList = Array.isArray(keys) ? keys : [keys];
+                        keyList.forEach(k => {
+                            try {
+                                const val = localStorage.getItem("safesearch_" + k);
+                                if (val !== null) res[k] = JSON.parse(val);
+                            } catch (e) {}
+                        });
+                        if (callback) callback(res);
+                    },
+                    set: function (items, callback) {
+                        try {
+                            Object.keys(items).forEach(k => {
+                                localStorage.setItem("safesearch_" + k, JSON.stringify(items[k]));
+                            });
+                        } catch (e) {}
+                        if (callback) callback();
+                    }
+                }
+            },
+            runtime: {}
+        };
 
 // Guard against repeated popup initialization
 let popupInitialized = false;
@@ -22,6 +51,14 @@ function initPopup() {
     const addWebsiteBtn = document.getElementById("addWebsite");
     const websiteList = document.getElementById("websiteList");
     const websiteBlockTime = document.getElementById("websiteBlockTime");
+    const tabModeTime = document.getElementById("tabModeTime");
+    const tabModeDays = document.getElementById("tabModeDays");
+    const timeModeControls = document.getElementById("timeModeControls");
+    const daysModeControls = document.getElementById("daysModeControls");
+    const websiteBlockDays = document.getElementById("websiteBlockDays");
+    const daysPreviewText = document.getElementById("daysPreviewText");
+
+    let currentBlockMode = "time"; // "time" | "days"
 
     // ============================
     // HELPER FUNCTIONS
@@ -50,15 +87,26 @@ function initPopup() {
         return target.getTime();
     }
 
-    // Format remaining milliseconds into human readable string
+    // Calculate timestamp from number of days
+    function calculateDaysBlockUntilTimestamp(daysValue) {
+        let days = parseInt(daysValue, 10);
+        if (isNaN(days) || days < 1) days = 1;
+        return Date.now() + (days * 24 * 60 * 60 * 1000);
+    }
+
+    // Format remaining milliseconds into human readable string (supports days, hours, mins, secs)
     function formatTimeRemaining(ms) {
         if (ms <= 0) return "0s";
 
         const totalSeconds = Math.floor(ms / 1000);
-        const hours = Math.floor(totalSeconds / 3600);
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
 
+        if (days > 0) {
+            return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+        }
         if (hours > 0) {
             return `${hours}h ${minutes}m ${seconds}s`;
         }
@@ -68,16 +116,32 @@ function initPopup() {
         return `${seconds}s`;
     }
 
-    // Format target timestamp into local time string (e.g. "10:00 PM" or "Tomorrow 10:00 PM")
+    // Format target timestamp into local date/time string
     function formatTargetTime(timestamp) {
         if (!timestamp) return "";
         const targetDate = new Date(timestamp);
         const now = new Date();
 
-        const isTomorrow = targetDate.getDate() !== now.getDate() || targetDate.getMonth() !== now.getMonth();
         const timeStr = targetDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
 
-        return isTomorrow ? `Tomorrow ${timeStr}` : timeStr;
+        const isToday = targetDate.getFullYear() === now.getFullYear() &&
+                        targetDate.getMonth() === now.getMonth() &&
+                        targetDate.getDate() === now.getDate();
+        if (isToday) {
+            return timeStr;
+        }
+
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        const isTomorrow = targetDate.getFullYear() === tomorrow.getFullYear() &&
+                           targetDate.getMonth() === tomorrow.getMonth() &&
+                           targetDate.getDate() === tomorrow.getDate();
+        if (isTomorrow) {
+            return `Tomorrow ${timeStr}`;
+        }
+
+        const dateStr = targetDate.toLocaleDateString([], { month: "short", day: "numeric" });
+        return `${dateStr}, ${timeStr}`;
     }
 
     // Format Date to HH:MM for <input type="time">
@@ -89,11 +153,29 @@ function initPopup() {
 
     function showKeywordFeedback(msg, isSuccess = true) {
         if (!keywordStatus) return;
-        keywordStatus.innerHTML = `<span class="note-icon">${isSuccess ? "✅" : "ℹ️"}</span> <span class="note-text">${escapeHtml(msg)}</span>`;
+        keywordStatus.textContent = "";
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "note-icon";
+        iconSpan.textContent = isSuccess ? "✅" : "ℹ️";
+        const textSpan = document.createElement("span");
+        textSpan.className = "note-text";
+        textSpan.textContent = msg;
+        keywordStatus.appendChild(iconSpan);
+        keywordStatus.appendChild(document.createTextNode(" "));
+        keywordStatus.appendChild(textSpan);
         keywordStatus.classList.add("feedback-active");
         setTimeout(function () {
             if (keywordStatus) {
-                keywordStatus.innerHTML = `<span class="note-icon">🔒</span> <span class="note-text">Searches are permanently blocked and hidden.</span>`;
+                keywordStatus.textContent = "";
+                const defaultIcon = document.createElement("span");
+                defaultIcon.className = "note-icon";
+                defaultIcon.textContent = "🔒";
+                const defaultText = document.createElement("span");
+                defaultText.className = "note-text";
+                defaultText.textContent = "Searches are permanently blocked and hidden.";
+                keywordStatus.appendChild(defaultIcon);
+                keywordStatus.appendChild(document.createTextNode(" "));
+                keywordStatus.appendChild(defaultText);
                 keywordStatus.classList.remove("feedback-active");
             }
         }, 2500);
@@ -109,14 +191,6 @@ function initPopup() {
         // Remove trailing slashes
         str = str.replace(/\/+$/, "");
         return str;
-    }
-
-    // HTML sanitizer to prevent XSS
-    function escapeHtml(str) {
-        if (!str) return "";
-        const div = document.createElement("div");
-        div.textContent = str;
-        return div.innerHTML;
     }
 
     // ============================
@@ -148,10 +222,20 @@ function initPopup() {
                 li.removeAttribute("data-block-until");
                 li.className = "rule-item is-unlocked";
 
-                // Update badge in-place
+                // Update badge in-place using safe DOM methods
                 const statusDiv = li.querySelector(".item-status");
                 if (statusDiv) {
-                    statusDiv.innerHTML = `<span class="badge badge-unlocked"><span class="badge-dot"></span><span class="badge-text">Time Complete (Ready to Delete)</span></span>`;
+                    statusDiv.textContent = "";
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-unlocked";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const text = document.createElement("span");
+                    text.className = "badge-text";
+                    text.textContent = "Time Complete (Ready to Delete)";
+                    badge.appendChild(dot);
+                    badge.appendChild(text);
+                    statusDiv.appendChild(badge);
                 }
 
                 // Update delete button in-place
@@ -159,7 +243,10 @@ function initPopup() {
                 if (deleteBtn) {
                     deleteBtn.className = "delete-btn btn-unlocked";
                     deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = `<span>🗑️ Delete</span>`;
+                    deleteBtn.textContent = "";
+                    const span = document.createElement("span");
+                    span.textContent = "🗑️ Delete";
+                    deleteBtn.appendChild(span);
                     deleteBtn.title = "Delete and unblock";
                 }
             } else {
@@ -173,10 +260,76 @@ function initPopup() {
     }
 
     // ============================
-    // PRESET CHIPS HANDLER (WEBSITES)
+    // MODE SWITCHER (HOURS vs DAYS)
     // ============================
 
-    document.querySelectorAll(".preset-chip").forEach(function (chip) {
+    function updateDaysPreview() {
+        if (!daysPreviewText || !websiteBlockDays) return;
+        let days = parseInt(websiteBlockDays.value, 10);
+        if (isNaN(days) || days < 1) days = 1;
+        const targetMs = Date.now() + (days * 24 * 60 * 60 * 1000);
+        const dayLabel = days === 1 ? "1 Day" : `${days} Days`;
+        daysPreviewText.textContent = `Locked until ${formatTargetTime(targetMs)} (${dayLabel})`;
+    }
+
+    if (tabModeTime && tabModeDays) {
+        tabModeTime.addEventListener("click", function () {
+            currentBlockMode = "time";
+            tabModeTime.classList.add("active");
+            tabModeDays.classList.remove("active");
+            if (timeModeControls) timeModeControls.style.display = "flex";
+            if (daysModeControls) daysModeControls.style.display = "none";
+        });
+
+        tabModeDays.addEventListener("click", function () {
+            currentBlockMode = "days";
+            tabModeDays.classList.add("active");
+            tabModeTime.classList.remove("active");
+            if (timeModeControls) timeModeControls.style.display = "none";
+            if (daysModeControls) daysModeControls.style.display = "flex";
+            updateDaysPreview();
+        });
+    }
+
+    // Days preset chips handler
+    document.querySelectorAll(".day-chip").forEach(function (chip) {
+        chip.addEventListener("click", function () {
+            const days = parseInt(chip.getAttribute("data-days"), 10);
+            if (isNaN(days)) return;
+
+            document.querySelectorAll(".day-chip").forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+
+            if (websiteBlockDays) {
+                websiteBlockDays.value = days;
+                updateDaysPreview();
+            }
+        });
+    });
+
+    // Custom days number input handler
+    if (websiteBlockDays) {
+        websiteBlockDays.addEventListener("input", function () {
+            const val = parseInt(websiteBlockDays.value, 10);
+            document.querySelectorAll(".day-chip").forEach(c => {
+                if (parseInt(c.getAttribute("data-days"), 10) === val) {
+                    c.classList.add("active");
+                } else {
+                    c.classList.remove("active");
+                }
+            });
+            updateDaysPreview();
+        });
+    }
+
+    // Initialize days preview
+    updateDaysPreview();
+
+    // ============================
+    // PRESET CHIPS HANDLER (TIME OF DAY)
+    // ============================
+
+    document.querySelectorAll("#timeModeControls .preset-chip").forEach(function (chip) {
         chip.addEventListener("click", function () {
             const targetId = chip.getAttribute("data-target");
             const preset = chip.getAttribute("data-preset");
@@ -306,7 +459,12 @@ function initPopup() {
             const website = cleanTargetUrl(websiteInput.value);
             if (website === "") return;
 
-            const blockUntil = calculateBlockUntilTimestamp(websiteBlockTime.value);
+            let blockUntil = null;
+            if (currentBlockMode === "days") {
+                blockUntil = calculateDaysBlockUntilTimestamp(websiteBlockDays ? websiteBlockDays.value : 1);
+            } else {
+                blockUntil = calculateBlockUntilTimestamp(websiteBlockTime ? websiteBlockTime.value : "");
+            }
 
             browserAPI.storage.local.get(["blockedWebsites"], function (result) {
                 if (browserAPI.runtime && browserAPI.runtime.lastError) {
@@ -355,18 +513,32 @@ function initPopup() {
             }
 
             const raw = (result && result.blockedWebsites) || [];
-            websiteList.innerHTML = "";
+            websiteList.textContent = "";
 
             if (raw.length === 0) {
                 const emptyLi = document.createElement("li");
                 emptyLi.className = "empty-state-card";
-                emptyLi.innerHTML = `
-                    <div class="empty-icon-ring">🛡️</div>
-                    <div class="empty-info">
-                        <span class="empty-heading">No sites blocked yet</span>
-                        <span class="empty-subtext">Add a website or URL above to build your focus shield.</span>
-                    </div>
-                `;
+
+                const emptyIcon = document.createElement("div");
+                emptyIcon.className = "empty-icon-ring";
+                emptyIcon.textContent = "🛡️";
+
+                const emptyInfo = document.createElement("div");
+                emptyInfo.className = "empty-info";
+
+                const heading = document.createElement("span");
+                heading.className = "empty-heading";
+                heading.textContent = "No sites blocked yet";
+
+                const subtext = document.createElement("span");
+                subtext.className = "empty-subtext";
+                subtext.textContent = "Add a website or URL above to build your focus shield.";
+
+                emptyInfo.appendChild(heading);
+                emptyInfo.appendChild(subtext);
+                emptyLi.appendChild(emptyIcon);
+                emptyLi.appendChild(emptyInfo);
+
                 websiteList.appendChild(emptyLi);
                 return;
             }
@@ -392,7 +564,15 @@ function initPopup() {
                 // Title
                 const titleDiv = document.createElement("div");
                 titleDiv.className = "item-title";
-                titleDiv.innerHTML = `<span class="site-icon">🌐</span> <span class="site-name">${escapeHtml(website)}</span>`;
+                const siteIcon = document.createElement("span");
+                siteIcon.className = "site-icon";
+                siteIcon.textContent = "🌐";
+                const siteName = document.createElement("span");
+                siteName.className = "site-name";
+                siteName.textContent = website;
+                titleDiv.appendChild(siteIcon);
+                titleDiv.appendChild(document.createTextNode(" "));
+                titleDiv.appendChild(siteName);
 
                 // Status badge
                 const statusDiv = document.createElement("div");
@@ -400,11 +580,43 @@ function initPopup() {
 
                 if (isLocked) {
                     const remainingMs = blockUntil - now;
-                    statusDiv.innerHTML = `<span class="badge badge-locked"><span class="badge-dot"></span><span class="badge-text">Locked until ${formatTargetTime(blockUntil)} (<span class="time-countdown">${formatTimeRemaining(remainingMs)}</span>)</span></span>`;
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-locked";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const badgeText = document.createElement("span");
+                    badgeText.className = "badge-text";
+                    badgeText.appendChild(document.createTextNode(`Locked until ${formatTargetTime(blockUntil)} (`));
+                    const countdownSpan = document.createElement("span");
+                    countdownSpan.className = "time-countdown";
+                    countdownSpan.textContent = formatTimeRemaining(remainingMs);
+                    badgeText.appendChild(countdownSpan);
+                    badgeText.appendChild(document.createTextNode(")"));
+                    badge.appendChild(dot);
+                    badge.appendChild(badgeText);
+                    statusDiv.appendChild(badge);
                 } else if (blockUntil && now >= blockUntil) {
-                    statusDiv.innerHTML = `<span class="badge badge-unlocked"><span class="badge-dot"></span><span class="badge-text">Time Complete (Ready to Delete)</span></span>`;
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-unlocked";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const badgeText = document.createElement("span");
+                    badgeText.className = "badge-text";
+                    badgeText.textContent = "Time Complete (Ready to Delete)";
+                    badge.appendChild(dot);
+                    badge.appendChild(badgeText);
+                    statusDiv.appendChild(badge);
                 } else {
-                    statusDiv.innerHTML = `<span class="badge badge-permanent"><span class="badge-dot"></span><span class="badge-text">Always Blocked</span></span>`;
+                    const badge = document.createElement("span");
+                    badge.className = "badge badge-permanent";
+                    const dot = document.createElement("span");
+                    dot.className = "badge-dot";
+                    const badgeText = document.createElement("span");
+                    badgeText.className = "badge-text";
+                    badgeText.textContent = "Always Blocked";
+                    badge.appendChild(dot);
+                    badge.appendChild(badgeText);
+                    statusDiv.appendChild(badge);
                 }
 
                 infoDiv.appendChild(titleDiv);
@@ -412,15 +624,18 @@ function initPopup() {
 
                 // Delete button
                 const deleteBtn = document.createElement("button");
+                const btnSpan = document.createElement("span");
                 if (isLocked) {
                     deleteBtn.className = "delete-btn btn-locked";
                     deleteBtn.disabled = true;
-                    deleteBtn.innerHTML = `<span>🔒 Locked</span>`;
+                    btnSpan.textContent = "🔒 Locked";
+                    deleteBtn.appendChild(btnSpan);
                     deleteBtn.title = `Locked until ${formatTargetTime(blockUntil)}`;
                 } else {
                     deleteBtn.className = "delete-btn btn-unlocked";
                     deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = `<span>🗑️ Delete</span>`;
+                    btnSpan.textContent = "🗑️ Delete";
+                    deleteBtn.appendChild(btnSpan);
                     deleteBtn.title = "Delete and unblock";
                 }
 

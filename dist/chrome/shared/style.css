@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
 :root {
+  color-scheme: dark;
   --bg-base: #0a0e1a;
   --bg-gradient: radial-gradient(120% 90% at 50% 0%, #17233f 0%, #0a0e1a 100%);
   --card-bg: rgba(23, 33, 54, 0.65);
@@ -282,6 +283,52 @@ input[type="text"]:focus {
   padding: 9px 11px;
 }
 
+/* Mode Switcher Tabs */
+.timer-mode-switcher {
+  display: flex;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 2.5px;
+  margin-bottom: 9px;
+  gap: 3px;
+}
+
+.mode-tab {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4.5px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-family: inherit;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mode-tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-tab.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(37, 99, 235, 0.45));
+  color: #ffffff;
+  border-color: rgba(96, 165, 250, 0.4);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.mode-content {
+  display: flex;
+  flex-direction: column;
+}
+
 .timer-row {
   display: flex;
   align-items: center;
@@ -298,29 +345,116 @@ input[type="text"]:focus {
   color: #cbd5e1;
 }
 
+/* Time Input Wrapper with Visible Clock */
 .time-input-wrapper {
   display: flex;
   align-items: center;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.time-input-wrapper:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
 }
 
 .time-input {
   padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
-  font-size: 12px;
+  border: none;
+  border-radius: 0;
+  font-size: 12.5px;
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace, inherit;
   color: #38bdf8;
   outline: none;
-  background: rgba(15, 23, 42, 0.9);
-  width: 95px;
+  background: transparent;
+  width: 92px;
   text-align: center;
-  transition: all 0.2s ease;
+  color-scheme: dark;
 }
 
-.time-input:focus {
+/* Bright, Glowing Clock Icon inside Chromium Time Input */
+.time-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: brightness(0) saturate(100%) invert(84%) sepia(28%) saturate(980%) hue-rotate(175deg) brightness(105%) contrast(97%);
+  opacity: 0.95;
+  padding: 2px 3px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.time-input::-webkit-calendar-picker-indicator:hover {
+  filter: brightness(0) saturate(100%) invert(100%) brightness(1.5) drop-shadow(0 0 4px #38bdf8);
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* Days Input Wrapper */
+.days-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 2px 8px 2px 4px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.days-input-wrapper:focus-within {
   border-color: #38bdf8;
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.days-input {
+  width: 48px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace, inherit;
+  color: #38bdf8;
+  text-align: center;
+  outline: none;
+  padding: 3px 2px;
+  color-scheme: dark;
+}
+
+.days-input::-webkit-outer-spin-button,
+.days-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.days-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.days-unit {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  padding-left: 2px;
+  user-select: none;
+}
+
+.days-preview-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 7px;
+  padding: 5px 8px;
+}
+
+.days-preview-note .preview-icon {
+  font-size: 12px;
 }
 
 .preset-chips {

@@ -82,22 +82,65 @@
 
         <!-- Timer Controls -->
         <div class="timer-section">
-            <div class="timer-row">
-                <label for="websiteBlockTime" class="timer-label">
+            <!-- Mode Switcher: By Hours vs By Days -->
+            <div class="timer-mode-switcher">
+                <button type="button" class="mode-tab active" id="tabModeTime" data-mode="time">
                     <span>⏱️</span>
-                    <span>Lock Access Until:</span>
-                </label>
-                <div class="time-input-wrapper">
-                    <input type="time" id="websiteBlockTime" class="time-input" value="22:00">
+                    <span>By Hours</span>
+                </button>
+                <button type="button" class="mode-tab" id="tabModeDays" data-mode="days">
+                    <span>📅</span>
+                    <span>By Days</span>
+                </button>
+            </div>
+
+            <!-- Mode 1: Hours / Time Mode -->
+            <div id="timeModeControls" class="mode-content">
+                <div class="timer-row">
+                    <label for="websiteBlockTime" class="timer-label">
+                        <span>⏱️</span>
+                        <span>Lock Access Until:</span>
+                    </label>
+                    <div class="time-input-wrapper">
+                        <input type="time" id="websiteBlockTime" class="time-input" value="22:00">
+                    </div>
+                </div>
+
+                <div class="preset-chips">
+                    <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="30m">+30m</button>
+                    <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="1h">+1h</button>
+                    <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="2h">+2h</button>
+                    <button type="button" class="preset-chip active" data-target="websiteBlockTime" data-preset="22:00">10 PM</button>
+                    <button type="button" class="preset-chip chip-clear" data-target="websiteBlockTime" data-preset="">Always</button>
                 </div>
             </div>
 
-            <div class="preset-chips">
-                <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="30m">+30m</button>
-                <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="1h">+1h</button>
-                <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="2h">+2h</button>
-                <button type="button" class="preset-chip active" data-target="websiteBlockTime" data-preset="22:00">10 PM</button>
-                <button type="button" class="preset-chip chip-clear" data-target="websiteBlockTime" data-preset="">Always</button>
+            <!-- Mode 2: Days Mode -->
+            <div id="daysModeControls" class="mode-content" style="display: none;">
+                <div class="timer-row">
+                    <label for="websiteBlockDays" class="timer-label">
+                        <span>📅</span>
+                        <span>Lock Duration:</span>
+                    </label>
+                    <div class="days-input-wrapper">
+                        <input type="number" id="websiteBlockDays" class="days-input" min="1" max="365" value="1" placeholder="Days">
+                        <span class="days-unit">Day(s)</span>
+                    </div>
+                </div>
+
+                <div class="preset-chips day-preset-chips">
+                    <button type="button" class="preset-chip day-chip active" data-days="1">1 Day</button>
+                    <button type="button" class="preset-chip day-chip" data-days="2">2 Days</button>
+                    <button type="button" class="preset-chip day-chip" data-days="3">3 Days</button>
+                    <button type="button" class="preset-chip day-chip" data-days="7">7 Days</button>
+                    <button type="button" class="preset-chip day-chip" data-days="15">15 Days</button>
+                    <button type="button" class="preset-chip day-chip" data-days="30">30 Days</button>
+                </div>
+
+                <div id="daysPreview" class="days-preview-note">
+                    <span class="preview-icon">🔒</span>
+                    <span id="daysPreviewText" class="preview-text">Locked for 1 Day</span>
+                </div>
             </div>
         </div>
     </section>
