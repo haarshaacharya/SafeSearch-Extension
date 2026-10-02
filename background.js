@@ -30,8 +30,8 @@ async function updateBlockingRules() {
             let target = cleanTargetUrl(raw);
 
             // If target contains a path (e.g. youtube.com/shorts), match with wildcard
-            // Otherwise if it's a domain (e.g. website.com), match domain boundary
-            const urlFilter = target.includes("/") ? `||${target}*` : `||${target}^`;
+            // Otherwise if it's a domain (e.g. website.com), block ALL paths on that domain
+            const urlFilter = target.includes("/") ? `||${target}*` : `||${target}/`;
 
             return {
                 id: index + 1,
@@ -97,8 +97,10 @@ async function redirectOpenBlockedTabs(websites) {
                     const tabFull = (tabDomain + tabUrlObj.pathname).toLowerCase().replace(/\/+$/, "");
 
                     if (target.includes("/")) {
+                        // Path-specific block: match domain + path prefix
                         return tabFull.startsWith(target);
                     } else {
+                        // Domain-only block: match domain AND all subpaths
                         return tabDomain === target || tabDomain.endsWith("." + target);
                     }
                 } catch (e) {
