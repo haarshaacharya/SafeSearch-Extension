@@ -67,17 +67,44 @@
             <span class="card-badge">Instant</span>
         </div>
 
+        <!-- Current Tab Quick Detector -->
+        <div id="currentTabContainer" class="current-site-bar" style="display: none;">
+            <div class="current-site-info">
+                <span class="current-site-icon">📌</span>
+                <span class="current-site-label">Current:</span>
+                <span id="currentTabDomain" class="current-site-name">site.com</span>
+            </div>
+            <button type="button" id="btnBlockCurrentSite" class="btn-quick-fill">
+                <span>🛡️ Block Entire Site</span>
+            </button>
+        </div>
+
         <div class="input-group">
             <input 
                 type="text" 
                 id="websiteInput" 
-                placeholder="e.g. site.com or site.com/shorts"
+                placeholder="e.g. linkedin.com, youtube.com"
                 autocomplete="off"
                 spellcheck="false"
             >
             <button id="addWebsite" class="btn-primary">
                 <span>Add</span>
             </button>
+        </div>
+
+        <!-- Block Scope Selector -->
+        <div class="scope-selector-row">
+            <button type="button" class="scope-pill active" id="scopeDomain" data-scope="domain">
+                <span>🌐 Entire Website</span>
+                <span class="scope-badge">Recommended</span>
+            </button>
+            <button type="button" class="scope-pill" id="scopeExact" data-scope="exact">
+                <span>📄 Exact Path Only</span>
+            </button>
+        </div>
+        <div id="scopePreviewNote" class="scope-preview-note">
+            <span id="scopePreviewIcon" class="scope-preview-icon">🛡️</span>
+            <span id="scopePreviewText">Blocks all pages, feeds & subdomains across the website.</span>
         </div>
 
         <!-- Timer Controls -->
@@ -112,6 +139,30 @@
                     <button type="button" class="preset-chip" data-target="websiteBlockTime" data-preset="2h">+2h</button>
                     <button type="button" class="preset-chip active" data-target="websiteBlockTime" data-preset="22:00">10 PM</button>
                     <button type="button" class="preset-chip chip-clear" data-target="websiteBlockTime" data-preset="">Always</button>
+                </div>
+
+                <!-- Days of Week / All Days Selector -->
+                <div class="days-of-week-section">
+                    <div class="dow-header">
+                        <span class="dow-label">📅 Schedule:</span>
+                        <label class="all-days-toggle" title="Tick for All Days, untick for 1 Day only">
+                            <input type="checkbox" id="allDaysCheck" checked>
+                            <span class="all-days-pill">All Days</span>
+                        </label>
+                    </div>
+                    <div class="dow-pills" id="dowPills">
+                        <button type="button" class="dow-pill active" data-day="0" title="Sunday">Sun</button>
+                        <button type="button" class="dow-pill active" data-day="1" title="Monday">Mon</button>
+                        <button type="button" class="dow-pill active" data-day="2" title="Tuesday">Tue</button>
+                        <button type="button" class="dow-pill active" data-day="3" title="Wednesday">Wed</button>
+                        <button type="button" class="dow-pill active" data-day="4" title="Thursday">Thu</button>
+                        <button type="button" class="dow-pill active" data-day="5" title="Friday">Fri</button>
+                        <button type="button" class="dow-pill active" data-day="6" title="Saturday">Sat</button>
+                    </div>
+                    <div class="dow-preview" id="dowPreview">
+                        <span class="dow-preview-icon" id="dowPreviewIcon">🔁</span>
+                        <span id="dowPreviewText">All Days: Locked every day until 10:00 PM</span>
+                    </div>
                 </div>
             </div>
 

@@ -58,11 +58,89 @@ function initPopup() {
     const websiteBlockDays = document.getElementById("websiteBlockDays");
     const daysPreviewText = document.getElementById("daysPreviewText");
 
+    // Scope & Current tab detector refs
+    const currentTabContainer = document.getElementById("currentTabContainer");
+    const currentTabDomain = document.getElementById("currentTabDomain");
+    const btnBlockCurrentSite = document.getElementById("btnBlockCurrentSite");
+    const scopeDomain = document.getElementById("scopeDomain");
+    const scopeExact = document.getElementById("scopeExact");
+    const scopePreviewIcon = document.getElementById("scopePreviewIcon");
+    const scopePreviewText = document.getElementById("scopePreviewText");
+    const scopePreviewNote = document.getElementById("scopePreviewNote");
+
+    let currentScope = "domain"; // "domain" | "exact"
+
+    // Days-of-week selector refs
+    const allDaysCheck = document.getElementById("allDaysCheck");
+    const dowPills = document.getElementById("dowPills");
+    const dowPreviewIcon = document.getElementById("dowPreviewIcon");
+    const dowPreviewText = document.getElementById("dowPreviewText");
+
     let currentBlockMode = "time"; // "time" | "days"
 
     // ============================
     // HELPER FUNCTIONS
     // ============================
+
+    // Returns array of selected day numbers (0=Sun … 6=Sat), or null if allDays
+    function getSelectedDays() {
+        if (allDaysCheck && allDaysCheck.checked) return null; // null = all days
+        const selected = [];
+        document.querySelectorAll(".dow-pill.active").forEach(function (pill) {
+            const d = parseInt(pill.getAttribute("data-day"), 10);
+            if (!isNaN(d)) selected.push(d);
+        });
+        return selected.length > 0 ? selected : null;
+    }
+
+    // Format selected days into readable text
+    function formatDayList(days) {
+        if (!days || days.length === 7) return "every day";
+        const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        return days.map(function (d) { return names[d]; }).join(", ");
+    }
+
+    // Update the dow preview note below the day pills
+    function updateDowPreview() {
+        if (!dowPreviewText) return;
+        const timeVal = websiteBlockTime ? websiteBlockTime.value : "";
+        let timeDisplay = "the set time";
+        if (timeVal) {
+            const parts = timeVal.split(":");
+            if (parts.length === 2) {
+                const h = parseInt(parts[0], 10);
+                const m = parts[1];
+                const ampm = h >= 12 ? "PM" : "AM";
+                const h12 = h % 12 === 0 ? 12 : (h > 12 ? h - 12 : h);
+                timeDisplay = `${h12}:${m} ${ampm}`;
+            }
+        }
+
+        if (!timeVal) {
+            if (dowPreviewIcon) dowPreviewIcon.textContent = "🔒";
+            dowPreviewText.textContent = "No time set — website will be always blocked";
+            return;
+        }
+
+        const isAll = Boolean(allDaysCheck && allDaysCheck.checked);
+        const selected = getSelectedDays();
+
+        if (isAll) {
+            if (dowPreviewIcon) dowPreviewIcon.textContent = "🔁";
+            dowPreviewText.textContent = `All Days: Locked every day until ${timeDisplay}`;
+        } else if (selected && selected.length === 1) {
+            const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            if (dowPreviewIcon) dowPreviewIcon.textContent = "📅";
+            dowPreviewText.textContent = `Only this ${names[selected[0]]}: Locked until ${timeDisplay}`;
+        } else if (selected && selected.length > 1 && selected.length < 7) {
+            if (dowPreviewIcon) dowPreviewIcon.textContent = "📅";
+            dowPreviewText.textContent = `Selected Days (${formatDayList(selected)}): Locked until ${timeDisplay}`;
+        } else {
+            // When All Days is ticked off: only one day timer runs
+            if (dowPreviewIcon) dowPreviewIcon.textContent = "⏱️";
+            dowPreviewText.textContent = `1 Day Only: Timer will run only once until ${timeDisplay}`;
+        }
+    }
 
     // Calculate timestamp from HH:MM string for websites
     function calculateBlockUntilTimestamp(timeString) {
@@ -181,16 +259,78 @@ function initPopup() {
         }, 2500);
     }
 
+    function extractDomain(input) {
+        if (!input) return "";
+        let str = input.trim().toLowerCase();
+        str = str.replace(/^https?:\/\//i, "");
+        str = str.replace(/^www\./i, "");
+        const slashIdx = str.indexOf("/");
+        const qIdx = str.indexOf("?");
+        const hIdx = str.indexOf("#");
+        let endIdx = str.length;
+        if (slashIdx !== -1) endIdx = Math.min(endIdx, slashIdx);
+        if (qIdx !== -1) endIdx = Math.min(endIdx, qIdx);
+        if (hIdx !== -1) endIdx = Math.min(endIdx, hIdx);
+        return str.substring(0, endIdx).trim();
+    }
+
     function cleanTargetUrl(input) {
         if (!input) return "";
         let str = input.trim().toLowerCase();
-        // Remove protocol http:// or https://
         str = str.replace(/^https?:\/\//i, "");
-        // Remove leading www.
         str = str.replace(/^www\./i, "");
-        // Remove trailing slashes
+        str = str.split("?")[0].split("#")[0];
         str = str.replace(/\/+$/, "");
         return str;
+    }
+
+    function setScope(scope) {
+        currentScope = scope;
+        if (scope === "domain") {
+            if (scopeDomain) scopeDomain.classList.add("active");
+            if (scopeExact) scopeExact.classList.remove("active");
+        } else {
+            if (scopeExact) scopeExact.classList.add("active");
+            if (scopeDomain) scopeDomain.classList.remove("active");
+        }
+        updateScopePreview();
+    }
+
+    function updateScopePreview() {
+        if (!scopePreviewText || !scopePreviewIcon) return;
+        const raw = websiteInput ? websiteInput.value.trim() : "";
+        if (!raw) {
+            if (currentScope === "domain") {
+                scopePreviewIcon.textContent = "🛡️";
+                scopePreviewText.textContent = "Blocks all pages, feeds & subdomains across the website.";
+            } else {
+                scopePreviewIcon.textContent = "📄";
+                scopePreviewText.textContent = "Blocks only the exact URL path you specify.";
+            }
+            if (scopePreviewNote) scopePreviewNote.classList.remove("preview-error");
+            return;
+        }
+
+        const domain = extractDomain(raw);
+        const hasDot = domain && domain.includes(".") && domain.length >= 3;
+
+        if (!hasDot) {
+            scopePreviewIcon.textContent = "⚠️";
+            scopePreviewText.textContent = "Please enter a valid website domain (e.g. linkedin.com)";
+            if (scopePreviewNote) scopePreviewNote.classList.add("preview-error");
+            return;
+        }
+
+        if (scopePreviewNote) scopePreviewNote.classList.remove("preview-error");
+
+        if (currentScope === "domain") {
+            scopePreviewIcon.textContent = "🛡️";
+            scopePreviewText.textContent = `Will block entire site: ${domain} (all pages & subdomains)`;
+        } else {
+            const clean = cleanTargetUrl(raw);
+            scopePreviewIcon.textContent = "📄";
+            scopePreviewText.textContent = `Will block only exact path: ${clean}`;
+        }
     }
 
     // ============================
@@ -232,7 +372,8 @@ function initPopup() {
                     dot.className = "badge-dot";
                     const text = document.createElement("span");
                     text.className = "badge-text";
-                    text.textContent = "Time Complete (Ready to Delete)";
+                    const isAllDays = li.getAttribute("data-all-days") === "true";
+                    text.textContent = isAllDays ? "Time Complete for Today (All Days Active)" : "Time Complete (Ready to Delete)";
                     badge.appendChild(dot);
                     badge.appendChild(text);
                     statusDiv.appendChild(badge);
@@ -290,6 +431,46 @@ function initPopup() {
             updateDaysPreview();
         });
     }
+
+    // ============================
+    // DAYS-OF-WEEK SELECTOR LOGIC
+    // ============================
+
+    // "All Days" master checkbox: toggle all pills on/off
+    if (allDaysCheck) {
+        allDaysCheck.addEventListener("change", function () {
+            const pills = document.querySelectorAll(".dow-pill");
+            if (allDaysCheck.checked) {
+                pills.forEach(function (p) { p.classList.add("active"); });
+            } else {
+                pills.forEach(function (p) { p.classList.remove("active"); });
+            }
+            updateDowPreview();
+        });
+    }
+
+    // Individual day pill toggles
+    if (dowPills) {
+        dowPills.addEventListener("click", function (e) {
+            const pill = e.target.closest(".dow-pill");
+            if (!pill) return;
+            pill.classList.toggle("active");
+
+            // Sync the allDaysCheck state
+            const allActive = document.querySelectorAll(".dow-pill.active").length === 7;
+            if (allDaysCheck) allDaysCheck.checked = allActive;
+            updateDowPreview();
+        });
+    }
+
+    // Update preview whenever time input changes
+    if (websiteBlockTime) {
+        websiteBlockTime.addEventListener("change", updateDowPreview);
+        websiteBlockTime.addEventListener("input", updateDowPreview);
+    }
+
+    // Initialize preview
+    updateDowPreview();
 
     // Days preset chips handler
     document.querySelectorAll(".day-chip").forEach(function (chip) {
@@ -354,6 +535,7 @@ function initPopup() {
             } else if (preset === "") {
                 targetInput.value = "";
             }
+            updateDowPreview();
         });
     });
 
@@ -375,7 +557,59 @@ function initPopup() {
                 addWebsiteBtn.click();
             }
         });
+        websiteInput.addEventListener("input", updateScopePreview);
     }
+
+    // Block scope selector buttons
+    if (scopeDomain) {
+        scopeDomain.addEventListener("click", () => setScope("domain"));
+    }
+    if (scopeExact) {
+        scopeExact.addEventListener("click", () => setScope("exact"));
+    }
+
+    // Active tab detector
+    if (browserAPI.tabs && browserAPI.tabs.query) {
+        try {
+            const handleTabs = (tabs) => {
+                if (tabs && tabs[0] && tabs[0].url) {
+                    const url = tabs[0].url;
+                    if (!url.startsWith("chrome://") && 
+                        !url.startsWith("edge://") && 
+                        !url.startsWith("about:") && 
+                        !url.startsWith("moz-extension://") && 
+                        !url.startsWith("chrome-extension://")) {
+                        const domain = extractDomain(url);
+                        if (domain && domain.includes(".") && domain.length >= 3) {
+                            if (currentTabContainer) currentTabContainer.style.display = "flex";
+                            if (currentTabDomain) currentTabDomain.textContent = domain;
+                        }
+                    }
+                }
+            };
+
+            const queryPromise = browserAPI.tabs.query({ active: true, currentWindow: true });
+            if (queryPromise && typeof queryPromise.then === "function") {
+                queryPromise.then(handleTabs).catch(() => {});
+            } else {
+                browserAPI.tabs.query({ active: true, currentWindow: true }, handleTabs);
+            }
+        } catch (e) {}
+    }
+
+    if (btnBlockCurrentSite) {
+        btnBlockCurrentSite.addEventListener("click", function () {
+            if (currentTabDomain && currentTabDomain.textContent) {
+                if (websiteInput) {
+                    websiteInput.value = currentTabDomain.textContent;
+                    setScope("domain");
+                    websiteInput.focus();
+                }
+            }
+        });
+    }
+
+    updateScopePreview();
 
     // ============================
     // EVENT DELEGATION FOR WEBSITE DELETES
@@ -456,14 +690,34 @@ function initPopup() {
 
     if (addWebsiteBtn) {
         addWebsiteBtn.addEventListener("click", function () {
-            const website = cleanTargetUrl(websiteInput.value);
-            if (website === "") return;
+            const rawVal = websiteInput ? websiteInput.value.trim() : "";
+            if (!rawVal) return;
+
+            const domain = extractDomain(rawVal);
+            if (!domain || !domain.includes(".") || domain.length < 3) {
+                if (scopePreviewNote) scopePreviewNote.classList.add("preview-error");
+                if (scopePreviewText) scopePreviewText.textContent = "Invalid website. Please enter e.g. linkedin.com";
+                return;
+            }
+
+            const targetUrl = (currentScope === "domain") ? domain : cleanTargetUrl(rawVal);
+            const targetScope = currentScope;
 
             let blockUntil = null;
+            let scheduleDays = null;
+            let isAllDays = false;
+            let targetTime = null;
+
             if (currentBlockMode === "days") {
                 blockUntil = calculateDaysBlockUntilTimestamp(websiteBlockDays ? websiteBlockDays.value : 1);
             } else {
-                blockUntil = calculateBlockUntilTimestamp(websiteBlockTime ? websiteBlockTime.value : "");
+                const timeVal = websiteBlockTime ? websiteBlockTime.value : "";
+                if (timeVal) {
+                    blockUntil = calculateBlockUntilTimestamp(timeVal);
+                    targetTime = timeVal;
+                    isAllDays = Boolean(allDaysCheck && allDaysCheck.checked);
+                    scheduleDays = getSelectedDays();
+                }
             }
 
             browserAPI.storage.local.get(["blockedWebsites"], function (result) {
@@ -476,24 +730,34 @@ function initPopup() {
                 // Check if already exists
                 const exists = raw.some(function (item) {
                     const w = typeof item === "string" ? item : (item.url || "");
-                    return cleanTargetUrl(w) === website;
+                    const itemScope = typeof item === "object" ? item.scope : (w.includes("/") ? "exact" : "domain");
+                    if (targetScope === "domain" && itemScope === "domain") {
+                        return extractDomain(w) === domain;
+                    }
+                    return cleanTargetUrl(w) === targetUrl;
                 });
 
                 if (!exists) {
                     const newItem = {
-                        url: website,
+                        url: targetUrl,
+                        scope: targetScope,
                         blockUntil: blockUntil,
+                        targetTime: targetTime,
+                        allDays: isAllDays, // true = All Days daily recurring, false = 1 Day Only
+                        scheduleDays: scheduleDays,
                         createdAt: Date.now()
                     };
 
                     raw.push(newItem);
 
                     browserAPI.storage.local.set({ blockedWebsites: raw }, function () {
-                        websiteInput.value = "";
+                        if (websiteInput) websiteInput.value = "";
+                        updateScopePreview();
                         loadWebsites();
                     });
                 } else {
-                    websiteInput.value = "";
+                    if (websiteInput) websiteInput.value = "";
+                    updateScopePreview();
                 }
             });
         });
@@ -543,16 +807,43 @@ function initPopup() {
                 return;
             }
 
+            const now = Date.now();
+            let needsSave = false;
+
+            // Auto-advance All Days recurring rules if a new calendar day has arrived
+            raw.forEach(function (item) {
+                if (item && typeof item === "object" && item.allDays && item.targetTime && item.blockUntil) {
+                    const blockDate = new Date(item.blockUntil);
+                    const nowDate = new Date(now);
+                    const isPast = now >= item.blockUntil;
+                    const isNewDay = nowDate.toDateString() !== blockDate.toDateString();
+                    if (isPast && isNewDay) {
+                        const nextTarget = calculateBlockUntilTimestamp(item.targetTime);
+                        if (nextTarget && nextTarget > item.blockUntil) {
+                            item.blockUntil = nextTarget;
+                            needsSave = true;
+                        }
+                    }
+                }
+            });
+
+            if (needsSave) {
+                browserAPI.storage.local.set({ blockedWebsites: raw });
+            }
+
             raw.forEach(function (item, index) {
                 const website = typeof item === "string" ? item : (item.url || "");
                 const blockUntil = typeof item === "string" ? null : item.blockUntil;
-                const now = Date.now();
+                const isAllDays = typeof item === "object" && item ? Boolean(item.allDays) : false;
+                const scheduleDays = typeof item === "object" && item ? item.scheduleDays : null;
+                const targetTime = typeof item === "object" && item ? item.targetTime : null;
                 const isLocked = Boolean(blockUntil && now < blockUntil);
 
                 const li = document.createElement("li");
                 li.className = isLocked ? "rule-item is-locked" : "rule-item is-unlocked";
                 li.setAttribute("data-type", "website");
                 li.setAttribute("data-index", index);
+                li.setAttribute("data-all-days", isAllDays ? "true" : "false");
                 if (isLocked) {
                     li.setAttribute("data-block-until", blockUntil);
                 }
@@ -561,18 +852,48 @@ function initPopup() {
                 const infoDiv = document.createElement("div");
                 infoDiv.className = "item-info";
 
-                // Title
+                // Title & Scope tag
+                const rawUrl = typeof item === "string" ? item : (item.url || "");
+                const domain = extractDomain(rawUrl);
+                const hasValidDomain = Boolean(domain && domain.includes(".") && domain.length >= 3);
+                const scope = (typeof item === "object" && item.scope) 
+                    ? item.scope 
+                    : (rawUrl.includes("/") ? "exact" : "domain");
+                const isExact = (scope === "exact");
+
                 const titleDiv = document.createElement("div");
                 titleDiv.className = "item-title";
+
                 const siteIcon = document.createElement("span");
                 siteIcon.className = "site-icon";
-                siteIcon.textContent = "🌐";
-                const siteName = document.createElement("span");
-                siteName.className = "site-name";
-                siteName.textContent = website;
-                titleDiv.appendChild(siteIcon);
-                titleDiv.appendChild(document.createTextNode(" "));
-                titleDiv.appendChild(siteName);
+
+                if (!hasValidDomain) {
+                    siteIcon.textContent = "⚠️";
+                    const siteName = document.createElement("span");
+                    siteName.className = "site-name";
+                    siteName.textContent = rawUrl.length > 28 ? rawUrl.substring(0, 28) + "…" : rawUrl;
+                    titleDiv.appendChild(siteIcon);
+                    titleDiv.appendChild(document.createTextNode(" "));
+                    titleDiv.appendChild(siteName);
+
+                    const invalidTag = document.createElement("span");
+                    invalidTag.className = "scope-tag scope-tag-invalid";
+                    invalidTag.textContent = "Invalid URL";
+                    titleDiv.appendChild(invalidTag);
+                } else {
+                    siteIcon.textContent = isExact ? "📄" : "🌐";
+                    const siteName = document.createElement("span");
+                    siteName.className = "site-name";
+                    siteName.textContent = rawUrl;
+                    titleDiv.appendChild(siteIcon);
+                    titleDiv.appendChild(document.createTextNode(" "));
+                    titleDiv.appendChild(siteName);
+
+                    const scopeTag = document.createElement("span");
+                    scopeTag.className = isExact ? "scope-tag scope-tag-exact" : "scope-tag scope-tag-domain";
+                    scopeTag.textContent = isExact ? "Specific Path" : "Entire Site";
+                    titleDiv.appendChild(scopeTag);
+                }
 
                 // Status badge
                 const statusDiv = document.createElement("div");
@@ -586,7 +907,18 @@ function initPopup() {
                     dot.className = "badge-dot";
                     const badgeText = document.createElement("span");
                     badgeText.className = "badge-text";
-                    badgeText.appendChild(document.createTextNode(`Locked until ${formatTargetTime(blockUntil)} (`));
+
+                    let scheduleLabel = "";
+                    if (isAllDays) {
+                        scheduleLabel = " · All Days";
+                    } else if (scheduleDays && scheduleDays.length > 0 && scheduleDays.length < 7) {
+                        const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                        scheduleLabel = " · " + scheduleDays.map(function(d){ return dayNames[d]; }).join(", ");
+                    } else if (targetTime) {
+                        scheduleLabel = " · 1 Day Only";
+                    }
+
+                    badgeText.appendChild(document.createTextNode(`Locked until ${formatTargetTime(blockUntil)}${scheduleLabel} (`));
                     const countdownSpan = document.createElement("span");
                     countdownSpan.className = "time-countdown";
                     countdownSpan.textContent = formatTimeRemaining(remainingMs);
@@ -602,7 +934,7 @@ function initPopup() {
                     dot.className = "badge-dot";
                     const badgeText = document.createElement("span");
                     badgeText.className = "badge-text";
-                    badgeText.textContent = "Time Complete (Ready to Delete)";
+                    badgeText.textContent = isAllDays ? "Time Complete for Today (All Days Active)" : "Time Complete (Ready to Delete)";
                     badge.appendChild(dot);
                     badge.appendChild(badgeText);
                     statusDiv.appendChild(badge);
@@ -621,6 +953,58 @@ function initPopup() {
 
                 infoDiv.appendChild(titleDiv);
                 infoDiv.appendChild(statusDiv);
+
+                // Quick Upgrade / Clean action buttons
+                if (!hasValidDomain) {
+                    const actionsRow = document.createElement("div");
+                    actionsRow.className = "rule-actions-row";
+                    const cleanBtn = document.createElement("button");
+                    cleanBtn.type = "button";
+                    cleanBtn.className = "btn-clean-corrupt";
+                    cleanBtn.textContent = "🗑️ Remove Invalid Entry";
+                    cleanBtn.title = "This entry has no valid domain and cannot match any website";
+                    cleanBtn.addEventListener("click", function (e) {
+                        e.stopPropagation();
+                        browserAPI.storage.local.get(["blockedWebsites"], function (res) {
+                            const list = (res && res.blockedWebsites) || [];
+                            if (index >= 0 && index < list.length) {
+                                list.splice(index, 1);
+                                browserAPI.storage.local.set({ blockedWebsites: list }, function () {
+                                    loadWebsites();
+                                });
+                            }
+                        });
+                    });
+                    actionsRow.appendChild(cleanBtn);
+                    infoDiv.appendChild(actionsRow);
+                } else if (isExact && domain) {
+                    const actionsRow = document.createElement("div");
+                    actionsRow.className = "rule-actions-row";
+                    const upgradeBtn = document.createElement("button");
+                    upgradeBtn.type = "button";
+                    upgradeBtn.className = "btn-upgrade-domain";
+                    upgradeBtn.textContent = `🛡️ Block All of ${domain}`;
+                    upgradeBtn.title = `Switch to blocking the entire ${domain} website (all pages & subdomains)`;
+                    upgradeBtn.addEventListener("click", function (e) {
+                        e.stopPropagation();
+                        browserAPI.storage.local.get(["blockedWebsites"], function (res) {
+                            const list = (res && res.blockedWebsites) || [];
+                            if (list[index]) {
+                                if (typeof list[index] === "object") {
+                                    list[index].url = domain;
+                                    list[index].scope = "domain";
+                                } else {
+                                    list[index] = { url: domain, scope: "domain", createdAt: Date.now() };
+                                }
+                                browserAPI.storage.local.set({ blockedWebsites: list }, function () {
+                                    loadWebsites();
+                                });
+                            }
+                        });
+                    });
+                    actionsRow.appendChild(upgradeBtn);
+                    infoDiv.appendChild(actionsRow);
+                }
 
                 // Delete button
                 const deleteBtn = document.createElement("button");
