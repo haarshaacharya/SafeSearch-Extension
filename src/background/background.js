@@ -5,6 +5,45 @@ const BLOCKED_PAGE_PATH = "/blocked/blocked.html";
 const BLOCKED_PAGE_URL = (browserAPI.runtime && browserAPI.runtime.getURL) 
     ? browserAPI.runtime.getURL("blocked/blocked.html") 
     : "";
+const EXPIRY_ALARM_NAME = "safesearch-website-expiry";
+
+function getNextDailyBlockTime(timeString, now) {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(timeString || "");
+    if (!match) return null;
+
+    const target = new Date(now);
+    target.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    if (target.getTime() <= now) {
+        target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+}
+
+function refreshRecurringBlocks(websites, now) {
+    websites.forEach((item) => {
+        if (item && typeof item === "object" && item.allDays && item.targetTime &&
+            Number.isFinite(item.blockUntil) && item.blockUntil <= now) {
+            const nextBlockUntil = getNextDailyBlockTime(item.targetTime, now);
+            if (nextBlockUntil) item.blockUntil = nextBlockUntil;
+        }
+    });
+}
+
+async function scheduleNextExpiry(websites, now) {
+    if (!browserAPI.alarms) return;
+
+    await browserAPI.alarms.clear(EXPIRY_ALARM_NAME);
+    const nextExpiry = websites.reduce((next, item) => {
+        const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+        return Number.isFinite(blockUntil) && blockUntil > now
+            ? Math.min(next, blockUntil)
+            : next;
+    }, Infinity);
+
+    if (Number.isFinite(nextExpiry)) {
+        await browserAPI.alarms.create(EXPIRY_ALARM_NAME, { when: nextExpiry });
+    }
+}
 
 function extractDomain(input) {
     if (!input) return "";
@@ -78,11 +117,17 @@ async function updateBlockingRules() {
     try {
         const data = await browserAPI.storage.local.get(["blockedWebsites"]);
         const websites = (data && data.blockedWebsites) || [];
+        const now = Date.now();
+        refreshRecurringBlocks(websites, now);
+        const activeWebsites = websites.filter((item) => {
+            const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+            return !Number.isFinite(blockUntil) || blockUntil > now;
+        });
 
         const oldRules = await browserAPI.declarativeNetRequest.getDynamicRules();
         const oldRuleIds = oldRules.map(rule => rule.id);
 
-        const newRules = websites.map((item, index) => {
+        const newRules = activeWebsites.map((item, index) => {
             let raw = typeof item === "string" ? item : (item.url || "");
             let target = cleanTargetUrl(raw);
             const isExact = (typeof item === "object" && item.scope === "exact");
@@ -118,11 +163,22 @@ async function updateBlockingRules() {
             addRules: newRules
         });
 
+        await scheduleNextExpiry(websites, now);
+
         // Immediately redirect any currently open tabs matching blocked rules
-        await redirectOpenBlockedTabs(websites);
+        await redirectOpenBlockedTabs(activeWebsites);
     } catch (err) {
         console.error("SafeSearch: Error updating blocking rules", err);
     }
+
+}
+
+if (browserAPI.alarms && browserAPI.alarms.onAlarm) {
+    browserAPI.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name === EXPIRY_ALARM_NAME) {
+            updateBlockingRules();
+        }
+    });
 }
 
 // Redirect any active tabs that match newly blocked sites/URLs
@@ -161,7 +217,11 @@ if (browserAPI.tabs && browserAPI.tabs.onUpdated) {
         try {
             const data = await browserAPI.storage.local.get(["blockedWebsites"]);
             const websites = (data && data.blockedWebsites) || [];
-            if (isTabUrlBlocked(urlToCheck, websites) && browserAPI.tabs.update) {
+            const activeWebsites = websites.filter((item) => {
+                const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+                return !Number.isFinite(blockUntil) || blockUntil > Date.now();
+            });
+            if (isTabUrlBlocked(urlToCheck, activeWebsites) && browserAPI.tabs.update) {
                 browserAPI.tabs.update(tabId, { url: BLOCKED_PAGE_URL }).catch(() => {});
             }
         } catch (e) {}
@@ -181,7 +241,11 @@ if (browserAPI.tabs && browserAPI.tabs.onActivated) {
 
             const data = await browserAPI.storage.local.get(["blockedWebsites"]);
             const websites = (data && data.blockedWebsites) || [];
-            if (isTabUrlBlocked(tab.url, websites) && browserAPI.tabs.update) {
+            const activeWebsites = websites.filter((item) => {
+                const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+                return !Number.isFinite(blockUntil) || blockUntil > Date.now();
+            });
+            if (isTabUrlBlocked(tab.url, activeWebsites) && browserAPI.tabs.update) {
                 browserAPI.tabs.update(activeInfo.tabId, { url: BLOCKED_PAGE_URL }).catch(() => {});
             }
         } catch (e) {}

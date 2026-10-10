@@ -270,7 +270,7 @@
             }
         }
 
-        if (document.body) {
+        if (document.documentElement) {
             mount();
         } else {
             document.addEventListener("DOMContentLoaded", mount);

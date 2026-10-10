@@ -76,7 +76,7 @@ function initPopup() {
     const dowPreviewIcon = document.getElementById("dowPreviewIcon");
     const dowPreviewText = document.getElementById("dowPreviewText");
 
-    let currentBlockMode = "time"; // "time" | "days"
+    let currentBlockMode = "days"; // "time" | "days"
 
     // ============================
     // HELPER FUNCTIONS
@@ -169,6 +169,7 @@ function initPopup() {
     function calculateDaysBlockUntilTimestamp(daysValue) {
         let days = parseInt(daysValue, 10);
         if (isNaN(days) || days < 1) days = 1;
+        days = Math.min(days, 365);
         return Date.now() + (days * 24 * 60 * 60 * 1000);
     }
 
@@ -408,6 +409,7 @@ function initPopup() {
         if (!daysPreviewText || !websiteBlockDays) return;
         let days = parseInt(websiteBlockDays.value, 10);
         if (isNaN(days) || days < 1) days = 1;
+        days = Math.min(days, 365);
         const targetMs = Date.now() + (days * 24 * 60 * 60 * 1000);
         const dayLabel = days === 1 ? "1 Day" : `${days} Days`;
         daysPreviewText.textContent = `Locked until ${formatTargetTime(targetMs)} (${dayLabel})`;
@@ -813,11 +815,8 @@ function initPopup() {
             // Auto-advance All Days recurring rules if a new calendar day has arrived
             raw.forEach(function (item) {
                 if (item && typeof item === "object" && item.allDays && item.targetTime && item.blockUntil) {
-                    const blockDate = new Date(item.blockUntil);
-                    const nowDate = new Date(now);
                     const isPast = now >= item.blockUntil;
-                    const isNewDay = nowDate.toDateString() !== blockDate.toDateString();
-                    if (isPast && isNewDay) {
+                    if (isPast) {
                         const nextTarget = calculateBlockUntilTimestamp(item.targetTime);
                         if (nextTarget && nextTarget > item.blockUntil) {
                             item.blockUntil = nextTarget;

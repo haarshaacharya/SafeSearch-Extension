@@ -17,7 +17,8 @@
   "permissions": [
     "storage",
     "declarativeNetRequest",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
 
   "host_permissions": [

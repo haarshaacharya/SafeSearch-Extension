@@ -35,9 +35,10 @@ People often unconsciously or deliberately bypass keyword filters using typos, s
 - **Instant Tab Sweep:** Adding a block rule immediately scans all currently open tabs and redirects matching sessions in real time.
 
 ### 4. ⏱️ Time-Locked Self-Control
-- Schedule website blocks with a specific unlock time (e.g., `Lock Access Until: 22:00` / 10:00 PM).
+- By default, set a website block duration in days (1–365), with quick choices including **5 days**, **1 week**, and **30 days**. The block expires automatically, including when the browser is closed.
+- Switch to **By Hours** to choose a specific unlock time (e.g., `Lock Access Until: 22:00` / 10:00 PM).
 - **Quick Presets:** `+30m`, `+1h`, `+2h`, `10 PM`, or `Always` (Permanent Block).
-- **Tamper-Resistant:** The delete/unblock button is strictly **disabled and locked** with a live countdown ticker until the designated time has elapsed.
+- **Tamper-Resistant:** The delete/unblock button is strictly **disabled and locked** with a live countdown ticker until the designated time has elapsed. Expired website rules are removed from browser-level blocking rules.
 
 ### 5. ⚡ Native Manifest V3 Performance & Zero Bypass
 - Powered by modern **`declarativeNetRequest`** for instantaneous, zero-flicker network-level redirects.
