@@ -15,9 +15,22 @@
     "<all_urls>"
   ],
 
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SafeSearch"
+    "default_title": "SafeSearch",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
 
   "background": {
@@ -29,7 +42,8 @@
       "resources": [
         "blocked.html",
         "style.css",
-        "blocked.js"
+        "blocked.js",
+        "icons/*"
       ],
       "matches": [
         "<all_urls>"
