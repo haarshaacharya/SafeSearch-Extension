@@ -76,7 +76,7 @@ function initPopup() {
     const dowPreviewIcon = document.getElementById("dowPreviewIcon");
     const dowPreviewText = document.getElementById("dowPreviewText");
 
-    let currentBlockMode = "time"; // "time" | "days"
+    let currentBlockMode = "days"; // "time" | "days"
 
     // ============================
     // HELPER FUNCTIONS
@@ -169,6 +169,7 @@ function initPopup() {
     function calculateDaysBlockUntilTimestamp(daysValue) {
         let days = parseInt(daysValue, 10);
         if (isNaN(days) || days < 1) days = 1;
+        days = Math.min(days, 365);
         return Date.now() + (days * 24 * 60 * 60 * 1000);
     }
 
@@ -259,9 +260,22 @@ function initPopup() {
         }, 2500);
     }
 
+    function isInternalBrowserUrl(input) {
+        if (!input) return false;
+        const str = input.trim().toLowerCase();
+        return str.startsWith("chrome://") || 
+               str.startsWith("edge://") || 
+               str.startsWith("brave://") || 
+               str.startsWith("opera://") || 
+               str.startsWith("about:");
+    }
+
     function extractDomain(input) {
         if (!input) return "";
         let str = input.trim().toLowerCase();
+        if (isInternalBrowserUrl(str)) {
+            return cleanTargetUrl(str);
+        }
         str = str.replace(/^https?:\/\//i, "");
         str = str.replace(/^www\./i, "");
         const slashIdx = str.indexOf("/");
@@ -277,6 +291,11 @@ function initPopup() {
     function cleanTargetUrl(input) {
         if (!input) return "";
         let str = input.trim().toLowerCase();
+        if (isInternalBrowserUrl(str)) {
+            str = str.split("?")[0].split("#")[0];
+            str = str.replace(/\/+$/, "");
+            return str;
+        }
         str = str.replace(/^https?:\/\//i, "");
         str = str.replace(/^www\./i, "");
         str = str.split("?")[0].split("#")[0];
@@ -311,12 +330,20 @@ function initPopup() {
             return;
         }
 
+        if (isInternalBrowserUrl(raw)) {
+            const clean = cleanTargetUrl(raw);
+            if (scopePreviewNote) scopePreviewNote.classList.remove("preview-error");
+            scopePreviewIcon.textContent = "🧩";
+            scopePreviewText.textContent = `Will block internal browser page: ${clean} (prevents disabling extensions)`;
+            return;
+        }
+
         const domain = extractDomain(raw);
         const hasDot = domain && domain.includes(".") && domain.length >= 3;
 
         if (!hasDot) {
             scopePreviewIcon.textContent = "⚠️";
-            scopePreviewText.textContent = "Please enter a valid website domain (e.g. linkedin.com)";
+            scopePreviewText.textContent = "Please enter a valid website domain (e.g. linkedin.com) or chrome://extensions";
             if (scopePreviewNote) scopePreviewNote.classList.add("preview-error");
             return;
         }
@@ -408,6 +435,7 @@ function initPopup() {
         if (!daysPreviewText || !websiteBlockDays) return;
         let days = parseInt(websiteBlockDays.value, 10);
         if (isNaN(days) || days < 1) days = 1;
+        days = Math.min(days, 365);
         const targetMs = Date.now() + (days * 24 * 60 * 60 * 1000);
         const dayLabel = days === 1 ? "1 Day" : `${days} Days`;
         daysPreviewText.textContent = `Locked until ${formatTargetTime(targetMs)} (${dayLabel})`;
@@ -574,7 +602,16 @@ function initPopup() {
             const handleTabs = (tabs) => {
                 if (tabs && tabs[0] && tabs[0].url) {
                     const url = tabs[0].url;
-                    if (!url.startsWith("chrome://") && 
+                    if (url.startsWith("chrome://extensions") || url.startsWith("edge://extensions") || url.startsWith("about:addons")) {
+                        if (currentTabContainer) currentTabContainer.style.display = "flex";
+                        if (currentTabDomain) currentTabDomain.textContent = "chrome://extensions";
+                        if (btnBlockCurrentSite) {
+                            btnBlockCurrentSite.textContent = "";
+                            const span = document.createElement("span");
+                            span.textContent = "🛡️ Block Extensions";
+                            btnBlockCurrentSite.appendChild(span);
+                        }
+                    } else if (!url.startsWith("chrome://") && 
                         !url.startsWith("edge://") && 
                         !url.startsWith("about:") && 
                         !url.startsWith("moz-extension://") && 
@@ -583,6 +620,12 @@ function initPopup() {
                         if (domain && domain.includes(".") && domain.length >= 3) {
                             if (currentTabContainer) currentTabContainer.style.display = "flex";
                             if (currentTabDomain) currentTabDomain.textContent = domain;
+                            if (btnBlockCurrentSite) {
+                                btnBlockCurrentSite.textContent = "";
+                                const span = document.createElement("span");
+                                span.textContent = "🛡️ Block Entire Site";
+                                btnBlockCurrentSite.appendChild(span);
+                            }
                         }
                     }
                 }
@@ -602,9 +645,26 @@ function initPopup() {
             if (currentTabDomain && currentTabDomain.textContent) {
                 if (websiteInput) {
                     websiteInput.value = currentTabDomain.textContent;
-                    setScope("domain");
+                    if (isInternalBrowserUrl(currentTabDomain.textContent)) {
+                        setScope("exact");
+                    } else {
+                        setScope("domain");
+                    }
                     websiteInput.focus();
                 }
+            }
+        });
+    }
+
+    // Quick preset chip for chrome://extensions
+    const btnQuickBlockExtensions = document.getElementById("btnQuickBlockExtensions");
+    if (btnQuickBlockExtensions) {
+        btnQuickBlockExtensions.addEventListener("click", function () {
+            if (websiteInput) {
+                websiteInput.value = "chrome://extensions";
+                setScope("exact");
+                updateScopePreview();
+                websiteInput.focus();
             }
         });
     }
@@ -693,15 +753,19 @@ function initPopup() {
             const rawVal = websiteInput ? websiteInput.value.trim() : "";
             if (!rawVal) return;
 
+            const isInternal = isInternalBrowserUrl(rawVal);
             const domain = extractDomain(rawVal);
-            if (!domain || !domain.includes(".") || domain.length < 3) {
+
+            if (!isInternal && (!domain || !domain.includes(".") || domain.length < 3)) {
                 if (scopePreviewNote) scopePreviewNote.classList.add("preview-error");
-                if (scopePreviewText) scopePreviewText.textContent = "Invalid website. Please enter e.g. linkedin.com";
+                if (scopePreviewText) scopePreviewText.textContent = "Invalid website. Please enter e.g. linkedin.com or chrome://extensions";
                 return;
             }
 
-            const targetUrl = (currentScope === "domain") ? domain : cleanTargetUrl(rawVal);
-            const targetScope = currentScope;
+            const targetUrl = isInternal 
+                ? cleanTargetUrl(rawVal) 
+                : ((currentScope === "domain") ? domain : cleanTargetUrl(rawVal));
+            const targetScope = isInternal ? "exact" : currentScope;
 
             let blockUntil = null;
             let scheduleDays = null;
@@ -730,6 +794,10 @@ function initPopup() {
                 // Check if already exists
                 const exists = raw.some(function (item) {
                     const w = typeof item === "string" ? item : (item.url || "");
+                    const itemIsInternal = isInternalBrowserUrl(w);
+                    if (isInternal || itemIsInternal) {
+                        return cleanTargetUrl(w) === targetUrl;
+                    }
                     const itemScope = typeof item === "object" ? item.scope : (w.includes("/") ? "exact" : "domain");
                     if (targetScope === "domain" && itemScope === "domain") {
                         return extractDomain(w) === domain;
@@ -813,11 +881,8 @@ function initPopup() {
             // Auto-advance All Days recurring rules if a new calendar day has arrived
             raw.forEach(function (item) {
                 if (item && typeof item === "object" && item.allDays && item.targetTime && item.blockUntil) {
-                    const blockDate = new Date(item.blockUntil);
-                    const nowDate = new Date(now);
                     const isPast = now >= item.blockUntil;
-                    const isNewDay = nowDate.toDateString() !== blockDate.toDateString();
-                    if (isPast && isNewDay) {
+                    if (isPast) {
                         const nextTarget = calculateBlockUntilTimestamp(item.targetTime);
                         if (nextTarget && nextTarget > item.blockUntil) {
                             item.blockUntil = nextTarget;
@@ -854,8 +919,9 @@ function initPopup() {
 
                 // Title & Scope tag
                 const rawUrl = typeof item === "string" ? item : (item.url || "");
+                const isInternal = isInternalBrowserUrl(rawUrl);
                 const domain = extractDomain(rawUrl);
-                const hasValidDomain = Boolean(domain && domain.includes(".") && domain.length >= 3);
+                const hasValidDomain = isInternal || Boolean(domain && domain.includes(".") && domain.length >= 3);
                 const scope = (typeof item === "object" && item.scope) 
                     ? item.scope 
                     : (rawUrl.includes("/") ? "exact" : "domain");
@@ -867,7 +933,20 @@ function initPopup() {
                 const siteIcon = document.createElement("span");
                 siteIcon.className = "site-icon";
 
-                if (!hasValidDomain) {
+                if (isInternal) {
+                    siteIcon.textContent = "🧩";
+                    const siteName = document.createElement("span");
+                    siteName.className = "site-name";
+                    siteName.textContent = rawUrl;
+                    titleDiv.appendChild(siteIcon);
+                    titleDiv.appendChild(document.createTextNode(" "));
+                    titleDiv.appendChild(siteName);
+
+                    const scopeTag = document.createElement("span");
+                    scopeTag.className = "scope-tag scope-tag-internal";
+                    scopeTag.textContent = "Internal Page";
+                    titleDiv.appendChild(scopeTag);
+                } else if (!hasValidDomain) {
                     siteIcon.textContent = "⚠️";
                     const siteName = document.createElement("span");
                     siteName.className = "site-name";
@@ -955,7 +1034,9 @@ function initPopup() {
                 infoDiv.appendChild(statusDiv);
 
                 // Quick Upgrade / Clean action buttons
-                if (!hasValidDomain) {
+                if (isInternal) {
+                    // Internal browser pages need no upgrade button
+                } else if (!hasValidDomain) {
                     const actionsRow = document.createElement("div");
                     actionsRow.className = "rule-actions-row";
                     const cleanBtn = document.createElement("button");

@@ -5,10 +5,91 @@ const BLOCKED_PAGE_PATH = "/blocked.html";
 const BLOCKED_PAGE_URL = (browserAPI.runtime && browserAPI.runtime.getURL) 
     ? browserAPI.runtime.getURL("blocked.html") 
     : "";
+const EXPIRY_ALARM_NAME = "safesearch-website-expiry";
+
+function getNextDailyBlockTime(timeString, now) {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(timeString || "");
+    if (!match) return null;
+
+    const target = new Date(now);
+    target.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    if (target.getTime() <= now) {
+        target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+}
+
+function refreshRecurringBlocks(websites, now) {
+    websites.forEach((item) => {
+        if (item && typeof item === "object" && item.allDays && item.targetTime &&
+            Number.isFinite(item.blockUntil) && item.blockUntil <= now) {
+            const nextBlockUntil = getNextDailyBlockTime(item.targetTime, now);
+            if (nextBlockUntil) item.blockUntil = nextBlockUntil;
+        }
+    });
+}
+
+async function scheduleNextExpiry(websites, now) {
+    if (!browserAPI.alarms) return;
+
+    await browserAPI.alarms.clear(EXPIRY_ALARM_NAME);
+    const nextExpiry = websites.reduce((next, item) => {
+        const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+        return Number.isFinite(blockUntil) && blockUntil > now
+            ? Math.min(next, blockUntil)
+            : next;
+    }, Infinity);
+
+    if (Number.isFinite(nextExpiry)) {
+        await browserAPI.alarms.create(EXPIRY_ALARM_NAME, { when: nextExpiry });
+    }
+}
+
+function isInternalBrowserUrl(input) {
+    if (!input) return false;
+    const str = input.trim().toLowerCase();
+    return str.startsWith("chrome://") || 
+           str.startsWith("edge://") || 
+           str.startsWith("brave://") || 
+           str.startsWith("opera://") || 
+           str.startsWith("about:");
+}
+
+function matchInternalUrl(tabUrl, target) {
+    if (!tabUrl || !target) return false;
+    const t = target.toLowerCase().replace(/\/+$/, "");
+    const u = tabUrl.toLowerCase().replace(/\/+$/, "");
+
+    // Direct match or subpath/query/hash match
+    if (u === t || u.startsWith(t + "/") || u.startsWith(t + "?") || u.startsWith(t + "#")) {
+        return true;
+    }
+
+    // Match browser extensions management aliases
+    const extAliases = ["chrome://extensions", "edge://extensions", "brave://extensions", "opera://extensions", "about:addons"];
+    if (extAliases.some(alias => t === alias || t.startsWith(alias))) {
+        if (extAliases.some(alias => u === alias || u.startsWith(alias + "/") || u.startsWith(alias + "?") || u.startsWith(alias + "#"))) {
+            return true;
+        }
+    }
+
+    // Match browser settings aliases
+    const setAliases = ["chrome://settings", "edge://settings", "brave://settings", "opera://settings"];
+    if (setAliases.some(alias => t === alias || t.startsWith(alias))) {
+        if (setAliases.some(alias => u === alias || u.startsWith(alias + "/") || u.startsWith(alias + "?") || u.startsWith(alias + "#"))) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 function extractDomain(input) {
     if (!input) return "";
     let str = input.trim().toLowerCase();
+    if (isInternalBrowserUrl(str)) {
+        return cleanTargetUrl(str);
+    }
     str = str.replace(/^https?:\/\//i, "");
     str = str.replace(/^www\./i, "");
     const slashIdx = str.indexOf("/");
@@ -24,6 +105,11 @@ function extractDomain(input) {
 function cleanTargetUrl(input) {
     if (!input) return "";
     let str = input.trim().toLowerCase();
+    if (isInternalBrowserUrl(str)) {
+        str = str.split("?")[0].split("#")[0];
+        str = str.replace(/\/+$/, "");
+        return str;
+    }
     str = str.replace(/^https?:\/\//i, "");
     str = str.replace(/^www\./i, "");
     str = str.split("?")[0].split("#")[0];
@@ -34,39 +120,89 @@ function cleanTargetUrl(input) {
 function isTabUrlBlocked(tabUrl, websites) {
     if (!tabUrl || !websites || !websites.length) return false;
 
-    if (tabUrl.startsWith("chrome://") || 
-        tabUrl.startsWith("edge://") || 
-        tabUrl.startsWith("about:") || 
-        tabUrl.startsWith("moz-extension://") || 
-        tabUrl.startsWith("chrome-extension://") || 
-        (BLOCKED_PAGE_URL && tabUrl.startsWith(BLOCKED_PAGE_URL))) {
+    // Never block this extension's own pages (prevent redirect loop)
+    if (BLOCKED_PAGE_URL && tabUrl.startsWith(BLOCKED_PAGE_URL)) {
+        return false;
+    }
+    if (browserAPI.runtime && browserAPI.runtime.id) {
+        const extOrigin = `chrome-extension://${browserAPI.runtime.id}`;
+        const mozOrigin = `moz-extension://${browserAPI.runtime.id}`;
+        if (tabUrl.startsWith(extOrigin) || tabUrl.startsWith(mozOrigin)) {
+            return false;
+        }
+    }
+    // Whitelist clean newtabs
+    if (tabUrl === "about:blank" || tabUrl === "chrome://newtab/" || tabUrl === "edge://newtab/") {
         return false;
     }
 
-    try {
-        const tabUrlObj = new URL(tabUrl);
-        const tabDomain = tabUrlObj.hostname.toLowerCase().replace(/^www\./, "");
-        const tabFull = (tabDomain + tabUrlObj.pathname).toLowerCase().replace(/\/+$/, "");
+    const lowerTabUrl = tabUrl.trim().toLowerCase();
+    const tabIsInternal = isInternalBrowserUrl(lowerTabUrl);
 
-        return websites.some((item) => {
-            const raw = typeof item === "string" ? item : (item.url || "");
-            const target = cleanTargetUrl(raw);
-            if (!target) return false;
+    for (const item of websites) {
+        const raw = typeof item === "string" ? item : (item.url || "");
+        if (!raw) continue;
+        const target = cleanTargetUrl(raw);
+        if (!target) continue;
 
-            const isExact = (typeof item === "object" && item.scope === "exact");
-
-            if (isExact && target.includes("/")) {
-                // Exact path match (e.g. youtube.com/shorts)
-                return tabFull === target || tabFull.startsWith(target + "/");
-            } else {
-                // Entire website domain block (e.g. linkedin.com blocks all feeds, networks, subdomains)
-                const targetDomain = extractDomain(target) || target;
-                if (!targetDomain) return false;
-                return tabDomain === targetDomain || tabDomain.endsWith("." + targetDomain);
+        if (tabIsInternal || isInternalBrowserUrl(target)) {
+            if (matchInternalUrl(lowerTabUrl, target)) {
+                return true;
             }
-        });
+        } else {
+            try {
+                const tabUrlObj = new URL(tabUrl);
+                const tabDomain = tabUrlObj.hostname.toLowerCase().replace(/^www\./, "");
+                const tabFull = (tabDomain + tabUrlObj.pathname).toLowerCase().replace(/\/+$/, "");
+
+                const isExact = (typeof item === "object" && item.scope === "exact");
+                if (isExact && target.includes("/")) {
+                    if (tabFull === target || tabFull.startsWith(target + "/")) {
+                        return true;
+                    }
+                } else {
+                    const targetDomain = extractDomain(target) || target;
+                    if (targetDomain && (tabDomain === targetDomain || tabDomain.endsWith("." + targetDomain))) {
+                        return true;
+                    }
+                }
+            } catch (e) {}
+        }
+    }
+
+    return false;
+}
+
+async function blockTab(tabId) {
+    if (!browserAPI.tabs || !tabId) return;
+    try {
+        const updateRes = browserAPI.tabs.update(tabId, { url: BLOCKED_PAGE_URL });
+        if (updateRes && typeof updateRes.catch === "function") {
+            updateRes.catch(() => {
+                tryCloseOrReplaceTab(tabId);
+            });
+        }
     } catch (e) {
-        return false;
+        tryCloseOrReplaceTab(tabId);
+    }
+}
+
+function tryCloseOrReplaceTab(tabId) {
+    if (!browserAPI.tabs || !tabId) return;
+    try {
+        if (browserAPI.tabs.create) {
+            browserAPI.tabs.create({ url: BLOCKED_PAGE_URL }, () => {
+                try {
+                    browserAPI.tabs.remove(tabId, () => {});
+                } catch (e) {}
+            });
+        } else if (browserAPI.tabs.remove) {
+            browserAPI.tabs.remove(tabId, () => {});
+        }
+    } catch (err) {
+        try {
+            browserAPI.tabs.remove(tabId, () => {});
+        } catch (e) {}
     }
 }
 
@@ -78,11 +214,23 @@ async function updateBlockingRules() {
     try {
         const data = await browserAPI.storage.local.get(["blockedWebsites"]);
         const websites = (data && data.blockedWebsites) || [];
+        const now = Date.now();
+        refreshRecurringBlocks(websites, now);
+        const activeWebsites = websites.filter((item) => {
+            const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+            return !Number.isFinite(blockUntil) || blockUntil > now;
+        });
 
         const oldRules = await browserAPI.declarativeNetRequest.getDynamicRules();
         const oldRuleIds = oldRules.map(rule => rule.id);
 
-        const newRules = websites.map((item, index) => {
+        // Filter out internal URLs from DNR rules since DNR only handles standard web schemes
+        const dnrWebsites = activeWebsites.filter((item) => {
+            const raw = typeof item === "string" ? item : (item.url || "");
+            return !isInternalBrowserUrl(raw);
+        });
+
+        const newRules = dnrWebsites.map((item, index) => {
             let raw = typeof item === "string" ? item : (item.url || "");
             let target = cleanTargetUrl(raw);
             const isExact = (typeof item === "object" && item.scope === "exact");
@@ -118,11 +266,21 @@ async function updateBlockingRules() {
             addRules: newRules
         });
 
+        await scheduleNextExpiry(websites, now);
+
         // Immediately redirect any currently open tabs matching blocked rules
-        await redirectOpenBlockedTabs(websites);
+        await redirectOpenBlockedTabs(activeWebsites);
     } catch (err) {
         console.error("SafeSearch: Error updating blocking rules", err);
     }
+}
+
+if (browserAPI.alarms && browserAPI.alarms.onAlarm) {
+    browserAPI.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name === EXPIRY_ALARM_NAME) {
+            updateBlockingRules();
+        }
+    });
 }
 
 // Redirect any active tabs that match newly blocked sites/URLs
@@ -138,13 +296,9 @@ async function redirectOpenBlockedTabs(websites) {
         if (!tabs || !tabs.length) return;
 
         for (const tab of tabs) {
-            if (isTabUrlBlocked(tab.url, websites) && browserAPI.tabs.update) {
-                try {
-                    const updateRes = browserAPI.tabs.update(tab.id, { url: BLOCKED_PAGE_URL });
-                    if (updateRes && typeof updateRes.catch === "function") {
-                        updateRes.catch(() => {});
-                    }
-                } catch (e) {}
+            const urlToCheck = tab.pendingUrl || tab.url;
+            if (isTabUrlBlocked(urlToCheck, websites)) {
+                blockTab(tab.id);
             }
         }
     } catch (err) {
@@ -152,17 +306,42 @@ async function redirectOpenBlockedTabs(websites) {
     }
 }
 
-// Listen for tab navigation (handles Single Page App / SPA URL changes e.g. clicking LinkedIn Network)
-if (browserAPI.tabs && browserAPI.tabs.onUpdated) {
-    browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-        const urlToCheck = changeInfo.url || (tab && tab.url);
+// Listen for tab creation
+if (browserAPI.tabs && browserAPI.tabs.onCreated) {
+    browserAPI.tabs.onCreated.addListener(async (tab) => {
+        if (!tab) return;
+        const urlToCheck = tab.pendingUrl || tab.url;
         if (!urlToCheck) return;
 
         try {
             const data = await browserAPI.storage.local.get(["blockedWebsites"]);
             const websites = (data && data.blockedWebsites) || [];
-            if (isTabUrlBlocked(urlToCheck, websites) && browserAPI.tabs.update) {
-                browserAPI.tabs.update(tabId, { url: BLOCKED_PAGE_URL }).catch(() => {});
+            const activeWebsites = websites.filter((item) => {
+                const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+                return !Number.isFinite(blockUntil) || blockUntil > Date.now();
+            });
+            if (isTabUrlBlocked(urlToCheck, activeWebsites)) {
+                blockTab(tab.id);
+            }
+        } catch (e) {}
+    });
+}
+
+// Listen for tab navigation (handles Single Page App / SPA URL changes e.g. clicking LinkedIn Network)
+if (browserAPI.tabs && browserAPI.tabs.onUpdated) {
+    browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+        const urlToCheck = changeInfo.url || (tab && (tab.pendingUrl || tab.url));
+        if (!urlToCheck) return;
+
+        try {
+            const data = await browserAPI.storage.local.get(["blockedWebsites"]);
+            const websites = (data && data.blockedWebsites) || [];
+            const activeWebsites = websites.filter((item) => {
+                const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+                return !Number.isFinite(blockUntil) || blockUntil > Date.now();
+            });
+            if (isTabUrlBlocked(urlToCheck, activeWebsites)) {
+                blockTab(tabId);
             }
         } catch (e) {}
     });
@@ -177,12 +356,18 @@ if (browserAPI.tabs && browserAPI.tabs.onActivated) {
                 ? await getTabPromise
                 : await new Promise((resolve) => browserAPI.tabs.get(activeInfo.tabId, resolve));
 
-            if (!tab || !tab.url) return;
+            if (!tab) return;
+            const urlToCheck = tab.pendingUrl || tab.url;
+            if (!urlToCheck) return;
 
             const data = await browserAPI.storage.local.get(["blockedWebsites"]);
             const websites = (data && data.blockedWebsites) || [];
-            if (isTabUrlBlocked(tab.url, websites) && browserAPI.tabs.update) {
-                browserAPI.tabs.update(activeInfo.tabId, { url: BLOCKED_PAGE_URL }).catch(() => {});
+            const activeWebsites = websites.filter((item) => {
+                const blockUntil = item && typeof item === "object" ? item.blockUntil : null;
+                return !Number.isFinite(blockUntil) || blockUntil > Date.now();
+            });
+            if (isTabUrlBlocked(urlToCheck, activeWebsites)) {
+                blockTab(activeInfo.tabId);
             }
         } catch (e) {}
     });
